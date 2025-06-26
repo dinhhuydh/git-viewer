@@ -39,11 +39,39 @@
             border-left-color: #007acc;
             font-weight: bold;
         }
+        .toolbar {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+        }
+        .toolbar button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .toolbar button:hover {
+            background-color: #0056b3;
+        }
+        #current-repo-path {
+            margin-left: 15px;
+            color: #666;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Git Viewer</h1>
+        <div class="toolbar">
+            <button id="open-repo-btn">Open Repository</button>
+            <span id="current-repo-path"></span>
+        </div>
         <h2>Branches</h2>
         <div id="branches">
             <p>Loading branches...</p>

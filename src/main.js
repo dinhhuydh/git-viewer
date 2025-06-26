@@ -1,8 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 
-async function loadGitBranches() {
+let currentRepoPath = null;
+
+async function loadGitBranches(repoPath = null) {
     try {
-        const branches = await invoke('get_git_branches');
+        let branches;
+        if (repoPath) {
+            branches = await invoke('get_git_branches_from_path', { path: repoPath });
+        } else {
+            branches = await invoke('get_git_branches');
+        }
         displayBranches(branches);
     } catch (error) {
         console.error('Error loading git branches:', error);
@@ -24,6 +32,25 @@ function displayBranches(branches) {
     branchesDiv.innerHTML = `<ul>${branchList}</ul>`;
 }
 
+async function openRepository() {
+    try {
+        const selected = await open({
+            directory: true,
+            title: 'Select Git Repository Folder'
+        });
+        
+        if (selected) {
+            currentRepoPath = selected;
+            document.getElementById('current-repo-path').textContent = selected;
+            await loadGitBranches(selected);
+        }
+    } catch (error) {
+        console.error('Error opening repository:', error);
+        document.getElementById('branches').innerHTML = `<p>Error: ${error}</p>`;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('open-repo-btn').addEventListener('click', openRepository);
     loadGitBranches();
 });
