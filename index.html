@@ -88,6 +88,77 @@
             color: #999;
             font-style: italic;
         }
+        .recent-repos-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .recent-repos-dropdown {
+            position: relative;
+        }
+        .recent-repos-button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .recent-repos-button:hover {
+            background-color: #005a9e;
+        }
+        .recent-repos-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 300px;
+            max-width: 500px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        .recent-repos-menu.show {
+            display: block;
+        }
+        .recent-repo-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f1f1f1;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .recent-repo-item:hover {
+            background-color: #f8f9fa;
+        }
+        .recent-repo-item:last-child {
+            border-bottom: none;
+        }
+        .recent-repo-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .recent-repo-path {
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .no-recent-repos {
+            padding: 16px;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
         .sidebar-header {
             padding: 15px;
             background-color: #f8f9fa;
@@ -230,7 +301,17 @@
     <!-- App Header -->
     <div class="app-header">
         <div class="app-title">Git Viewer</div>
-        <div class="repo-name" id="repo-name"></div>
+        <div class="recent-repos-container">
+            <div class="repo-name" id="repo-name"></div>
+            <div class="recent-repos-dropdown">
+                <button class="recent-repos-button" id="recent-repos-button">
+                    Recent ▼
+                </button>
+                <div class="recent-repos-menu" id="recent-repos-menu">
+                    <div class="no-recent-repos">No recent repositories</div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <div class="container">

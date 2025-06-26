@@ -7,6 +7,10 @@ let currentBranch = null;
 let selectedCommit = null;
 let selectedFile = null;
 
+// Recent repositories management
+const RECENT_REPOS_KEY = 'git-viewer-recent-repos';
+const MAX_RECENT_REPOS = 10;
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -242,6 +246,85 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getRecentRepositories() {
+    try {
+        const stored = localStorage.getItem(RECENT_REPOS_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+        console.error('Error loading recent repositories:', error);
+        return [];
+    }
+}
+
+function saveRecentRepositories(repos) {
+    try {
+        localStorage.setItem(RECENT_REPOS_KEY, JSON.stringify(repos));
+    } catch (error) {
+        console.error('Error saving recent repositories:', error);
+    }
+}
+
+function addToRecentRepositories(repoPath) {
+    let recentRepos = getRecentRepositories();
+    
+    // Remove if already exists to avoid duplicates
+    recentRepos = recentRepos.filter(repo => repo.path !== repoPath);
+    
+    // Add to beginning
+    const repoName = repoPath.split('/').pop() || repoPath;
+    recentRepos.unshift({
+        path: repoPath,
+        name: repoName,
+        lastOpened: new Date().toISOString()
+    });
+    
+    // Keep only MAX_RECENT_REPOS
+    if (recentRepos.length > MAX_RECENT_REPOS) {
+        recentRepos = recentRepos.slice(0, MAX_RECENT_REPOS);
+    }
+    
+    saveRecentRepositories(recentRepos);
+    updateRecentRepositoriesMenu();
+}
+
+function updateRecentRepositoriesMenu() {
+    const menu = document.getElementById('recent-repos-menu');
+    const recentRepos = getRecentRepositories();
+    
+    if (recentRepos.length === 0) {
+        menu.innerHTML = '<div class="no-recent-repos">No recent repositories</div>';
+        return;
+    }
+    
+    const menuItems = recentRepos.map(repo => `
+        <div class="recent-repo-item" data-repo-path="${repo.path}">
+            <div class="recent-repo-name">${repo.name}</div>
+            <div class="recent-repo-path">${repo.path}</div>
+        </div>
+    `).join('');
+    
+    menu.innerHTML = menuItems;
+    
+    // Add click listeners
+    menu.querySelectorAll('.recent-repo-item').forEach(item => {
+        item.addEventListener('click', async (e) => {
+            const repoPath = e.currentTarget.dataset.repoPath;
+            await openRepository(repoPath);
+            hideRecentRepositoriesMenu();
+        });
+    });
+}
+
+function showRecentRepositoriesMenu() {
+    const menu = document.getElementById('recent-repos-menu');
+    menu.classList.add('show');
+}
+
+function hideRecentRepositoriesMenu() {
+    const menu = document.getElementById('recent-repos-menu');
+    menu.classList.remove('show');
+}
+
 function updateRepositoryName(repoPath) {
     const repoNameElement = document.getElementById('repo-name');
     if (repoPath) {
@@ -253,16 +336,21 @@ function updateRepositoryName(repoPath) {
     }
 }
 
-async function openRepository() {
+async function openRepository(repoPath = null) {
     try {
-        const selected = await open({
-            directory: true,
-            title: 'Select Git Repository Folder'
-        });
+        let selected = repoPath;
+        
+        if (!selected) {
+            selected = await open({
+                directory: true,
+                title: 'Select Git Repository Folder'
+            });
+        }
         
         if (selected) {
             currentRepoPath = selected;
             updateRepositoryName(selected);
+            addToRecentRepositories(selected);
             await loadGitBranches(selected);
         }
     } catch (error) {
@@ -281,6 +369,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     await appWindow.listen('menu-open-repo', () => {
         openRepository();
     });
+    
+    // Setup recent repositories dropdown
+    const recentReposButton = document.getElementById('recent-repos-button');
+    const recentReposMenu = document.getElementById('recent-repos-menu');
+    
+    recentReposButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (recentReposMenu.classList.contains('show')) {
+            hideRecentRepositoriesMenu();
+        } else {
+            showRecentRepositoriesMenu();
+        }
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!recentReposButton.contains(e.target) && !recentReposMenu.contains(e.target)) {
+            hideRecentRepositoriesMenu();
+        }
+    });
+    
+    // Initialize recent repositories menu
+    updateRecentRepositoriesMenu();
     
     loadGitBranches();
 });
