@@ -21,6 +21,16 @@
             border-right: 1px solid #dee2e6;
             overflow-y: auto;
         }
+        .commits-sidebar:focus {
+            outline: 2px solid #007acc;
+            outline-offset: -2px;
+        }
+        #commits {
+            outline: none;
+        }
+        #commits:focus {
+            outline: none;
+        }
         .file-panel {
             width: 300px;
             min-width: 200px;
@@ -354,7 +364,7 @@
     
     <div class="container">
         <!-- Commits Sidebar -->
-        <div class="commits-sidebar">
+        <div class="commits-sidebar" id="commits-sidebar" tabindex="0">
             <div class="sidebar-header">
                 Commits
                 <select id="branch-selector" class="branch-selector">

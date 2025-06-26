@@ -19,6 +19,10 @@ let isResizing = false;
 let currentFileIndex = -1;
 let fileItems = [];
 
+// Commit navigation
+let currentCommitIndex = -1;
+let commitItems = [];
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -102,6 +106,8 @@ function displayCommits(commits) {
     const commitsDiv = document.getElementById('commits');
     if (commits.length === 0) {
         commitsDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No commits found</p>';
+        commitItems = [];
+        currentCommitIndex = -1;
         return;
     }
     
@@ -117,10 +123,15 @@ function displayCommits(commits) {
     
     commitsDiv.innerHTML = commitList;
     
+    // Update commit items array for keyboard navigation
+    commitItems = Array.from(commitsDiv.querySelectorAll('.commit-item'));
+    currentCommitIndex = -1;
+    
     // Add click listeners to commits
-    commitsDiv.querySelectorAll('.commit-item').forEach(commitItem => {
+    commitItems.forEach((commitItem, index) => {
         commitItem.addEventListener('click', () => {
             const commitId = commitItem.dataset.commitId;
+            currentCommitIndex = index;
             selectCommit(commitId);
         });
     });
@@ -135,7 +146,16 @@ async function selectCommit(commitId) {
     document.querySelectorAll('.commit-item').forEach(item => {
         item.classList.remove('selected');
     });
-    document.querySelector(`[data-commit-id="${commitId}"]`)?.classList.add('selected');
+    const selectedElement = document.querySelector(`[data-commit-id="${commitId}"]`);
+    if (selectedElement) {
+        selectedElement.classList.add('selected');
+        
+        // Update current commit index if not already set by keyboard navigation
+        const index = commitItems.indexOf(selectedElement);
+        if (index !== -1) {
+            currentCommitIndex = index;
+        }
+    }
     
     await loadFileChanges(commitId);
 }
@@ -437,6 +457,111 @@ function handleFileNavigation(direction) {
     navigateToFileIndex(newIndex);
 }
 
+function navigateToCommitIndex(index) {
+    if (commitItems.length === 0 || index < 0 || index >= commitItems.length) {
+        return;
+    }
+    
+    currentCommitIndex = index;
+    const commitItem = commitItems[index];
+    const commitId = commitItem.dataset.commitId;
+    
+    // Update selection UI
+    commitItems.forEach(item => item.classList.remove('selected'));
+    commitItem.classList.add('selected');
+    
+    // Scroll into view if needed
+    commitItem.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'nearest',
+        inline: 'nearest'
+    });
+    
+    // Select the commit
+    selectCommit(commitId);
+}
+
+function handleCommitNavigation(direction) {
+    if (commitItems.length === 0) return;
+    
+    let newIndex;
+    
+    switch (direction) {
+        case 'up':
+        case 'left':
+            newIndex = currentCommitIndex <= 0 ? commitItems.length - 1 : currentCommitIndex - 1;
+            break;
+        case 'down':
+        case 'right':
+            newIndex = currentCommitIndex >= commitItems.length - 1 ? 0 : currentCommitIndex + 1;
+            break;
+        case 'home':
+            newIndex = 0;
+            break;
+        case 'end':
+            newIndex = commitItems.length - 1;
+            break;
+        default:
+            return;
+    }
+    
+    navigateToCommitIndex(newIndex);
+}
+
+function initializeCommitKeyboardNavigation() {
+    const commitsSidebar = document.getElementById('commits-sidebar');
+    
+    commitsSidebar.addEventListener('keydown', (e) => {
+        // Only handle navigation if the commits sidebar is focused and we have commits
+        if (document.activeElement !== commitsSidebar || commitItems.length === 0) {
+            return;
+        }
+        
+        switch (e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                handleCommitNavigation('up');
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                handleCommitNavigation('down');
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                handleCommitNavigation('left');
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                handleCommitNavigation('right');
+                break;
+            case 'Home':
+                e.preventDefault();
+                handleCommitNavigation('home');
+                break;
+            case 'End':
+                e.preventDefault();
+                handleCommitNavigation('end');
+                break;
+            case 'Enter':
+            case ' ':
+                e.preventDefault();
+                if (currentCommitIndex >= 0 && currentCommitIndex < commitItems.length) {
+                    const commitId = commitItems[currentCommitIndex].dataset.commitId;
+                    selectCommit(commitId);
+                }
+                break;
+        }
+    });
+    
+    // Focus commits sidebar when clicking on it
+    commitsSidebar.addEventListener('click', (e) => {
+        // Don't focus if clicking on branch selector
+        if (!e.target.closest('.branch-selector')) {
+            commitsSidebar.focus();
+        }
+    });
+}
+
 function initializeFileKeyboardNavigation() {
     const filePanel = document.getElementById('file-panel');
     
@@ -600,6 +725,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize file keyboard navigation
     initializeFileKeyboardNavigation();
+    
+    // Initialize commit keyboard navigation
+    initializeCommitKeyboardNavigation();
     
     loadGitBranches();
 });
