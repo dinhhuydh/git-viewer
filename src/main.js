@@ -24,8 +24,11 @@ async function loadGitBranches(repoPath = null) {
 
 function displayBranches(branches) {
     const branchesDiv = document.getElementById('branches');
+    const branchSelector = document.getElementById('branch-selector');
+    
     if (branches.length === 0) {
         branchesDiv.innerHTML = '<p>No branches found</p>';
+        branchSelector.innerHTML = '<option value="">No branches found</option>';
         return;
     }
     
@@ -37,11 +40,27 @@ function displayBranches(branches) {
     
     branchesDiv.innerHTML = `<ul>${branchList}</ul>`;
     
-    // Add click listeners to branches
+    // Populate branch selector dropdown
+    const branchOptions = branches.map(branch => 
+        `<option value="${branch.name}" ${branch.is_current ? 'selected' : ''}>${branch.name}${branch.is_current ? ' (current)' : ''}</option>`
+    ).join('');
+    branchSelector.innerHTML = branchOptions;
+    
+    // Add change listener to branch selector
+    branchSelector.addEventListener('change', (e) => {
+        const selectedBranch = e.target.value;
+        if (selectedBranch) {
+            selectBranch(selectedBranch);
+        }
+    });
+    
+    // Add click listeners to branches in main panel
     branchesDiv.querySelectorAll('li[data-branch]').forEach(branchItem => {
         branchItem.addEventListener('click', () => {
             const branchName = branchItem.dataset.branch;
             selectBranch(branchName);
+            // Update selector to match clicked branch
+            branchSelector.value = branchName;
         });
         branchItem.style.cursor = 'pointer';
     });
@@ -58,11 +77,17 @@ async function selectBranch(branchName) {
     
     currentBranch = branchName;
     
-    // Update branch selection UI
+    // Update branch selection UI in main panel
     document.querySelectorAll('[data-branch]').forEach(item => {
         item.classList.remove('selected');
     });
     document.querySelector(`[data-branch="${branchName}"]`)?.classList.add('selected');
+    
+    // Update branch selector dropdown
+    const branchSelector = document.getElementById('branch-selector');
+    if (branchSelector) {
+        branchSelector.value = branchName;
+    }
     
     await loadCommits(branchName);
 }

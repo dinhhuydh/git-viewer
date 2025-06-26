@@ -92,6 +92,22 @@
             border-bottom: 1px solid #dee2e6;
             font-weight: bold;
         }
+        .branch-selector {
+            width: 100%;
+            padding: 8px 12px;
+            margin-top: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background-color: white;
+            font-size: 14px;
+            font-family: monospace;
+            cursor: pointer;
+        }
+        .branch-selector:focus {
+            outline: none;
+            border-color: #007acc;
+            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+        }
         .commit-item {
             padding: 12px 15px;
             border-bottom: 1px solid #eee;
@@ -212,7 +228,12 @@
     <div class="container">
         <!-- Commits Sidebar -->
         <div class="commits-sidebar">
-            <div class="sidebar-header">Commits</div>
+            <div class="sidebar-header">
+                Commits
+                <select id="branch-selector" class="branch-selector">
+                    <option value="">Select a branch...</option>
+                </select>
+            </div>
             <div id="commits">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a branch to view commits</p>
             </div>
