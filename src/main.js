@@ -11,6 +11,14 @@ let selectedFile = null;
 const RECENT_REPOS_KEY = 'git-viewer-recent-repos';
 const MAX_RECENT_REPOS = 10;
 
+// Panel resizing
+const FILE_PANEL_WIDTH_KEY = 'git-viewer-file-panel-width';
+let isResizing = false;
+
+// File navigation
+let currentFileIndex = -1;
+let fileItems = [];
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -151,6 +159,8 @@ function displayFileChanges(changes) {
     const changesDiv = document.getElementById('file-changes');
     if (changes.length === 0) {
         changesDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No file changes found</p>';
+        fileItems = [];
+        currentFileIndex = -1;
         return;
     }
     
@@ -163,10 +173,15 @@ function displayFileChanges(changes) {
     
     changesDiv.innerHTML = changesList;
     
+    // Update file items array for keyboard navigation
+    fileItems = Array.from(changesDiv.querySelectorAll('.file-item'));
+    currentFileIndex = -1;
+    
     // Add click listeners to files
-    changesDiv.querySelectorAll('.file-item').forEach(fileItem => {
+    fileItems.forEach((fileItem, index) => {
         fileItem.addEventListener('click', () => {
             const filePath = fileItem.dataset.filePath;
+            currentFileIndex = index;
             selectFile(filePath);
         });
     });
@@ -181,7 +196,16 @@ async function selectFile(filePath) {
     document.querySelectorAll('.file-item').forEach(item => {
         item.classList.remove('selected');
     });
-    document.querySelector(`[data-file-path="${filePath}"]`)?.classList.add('selected');
+    const selectedElement = document.querySelector(`[data-file-path="${filePath}"]`);
+    if (selectedElement) {
+        selectedElement.classList.add('selected');
+        
+        // Update current file index if not already set by keyboard navigation
+        const index = fileItems.indexOf(selectedElement);
+        if (index !== -1) {
+            currentFileIndex = index;
+        }
+    }
     
     await loadFileDiff(filePath);
 }
@@ -362,6 +386,184 @@ async function openRepository(repoPath = null) {
     }
 }
 
+function navigateToFileIndex(index) {
+    if (fileItems.length === 0 || index < 0 || index >= fileItems.length) {
+        return;
+    }
+    
+    currentFileIndex = index;
+    const fileItem = fileItems[index];
+    const filePath = fileItem.dataset.filePath;
+    
+    // Update selection UI
+    fileItems.forEach(item => item.classList.remove('selected'));
+    fileItem.classList.add('selected');
+    
+    // Scroll into view if needed
+    fileItem.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'nearest',
+        inline: 'nearest'
+    });
+    
+    // Select the file
+    selectFile(filePath);
+}
+
+function handleFileNavigation(direction) {
+    if (fileItems.length === 0) return;
+    
+    let newIndex;
+    
+    switch (direction) {
+        case 'up':
+        case 'left':
+            newIndex = currentFileIndex <= 0 ? fileItems.length - 1 : currentFileIndex - 1;
+            break;
+        case 'down':
+        case 'right':
+            newIndex = currentFileIndex >= fileItems.length - 1 ? 0 : currentFileIndex + 1;
+            break;
+        case 'home':
+            newIndex = 0;
+            break;
+        case 'end':
+            newIndex = fileItems.length - 1;
+            break;
+        default:
+            return;
+    }
+    
+    navigateToFileIndex(newIndex);
+}
+
+function initializeFileKeyboardNavigation() {
+    const filePanel = document.getElementById('file-panel');
+    
+    filePanel.addEventListener('keydown', (e) => {
+        // Only handle navigation if the file panel is focused and we have files
+        if (document.activeElement !== filePanel || fileItems.length === 0) {
+            return;
+        }
+        
+        switch (e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                handleFileNavigation('up');
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                handleFileNavigation('down');
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                handleFileNavigation('left');
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                handleFileNavigation('right');
+                break;
+            case 'Home':
+                e.preventDefault();
+                handleFileNavigation('home');
+                break;
+            case 'End':
+                e.preventDefault();
+                handleFileNavigation('end');
+                break;
+            case 'Enter':
+            case ' ':
+                e.preventDefault();
+                if (currentFileIndex >= 0 && currentFileIndex < fileItems.length) {
+                    const filePath = fileItems[currentFileIndex].dataset.filePath;
+                    selectFile(filePath);
+                }
+                break;
+        }
+    });
+    
+    // Focus file panel when clicking on it
+    filePanel.addEventListener('click', (e) => {
+        // Don't focus if clicking on resize handles
+        if (!e.target.classList.contains('resize-handle')) {
+            filePanel.focus();
+        }
+    });
+}
+
+function initializePanelResizing() {
+    const filePanel = document.getElementById('file-panel');
+    const leftResizeHandle = document.getElementById('file-panel-resize-left');
+    const rightResizeHandle = document.getElementById('file-panel-resize-right');
+    
+    // Load saved width
+    const savedWidth = localStorage.getItem(FILE_PANEL_WIDTH_KEY);
+    if (savedWidth) {
+        filePanel.style.width = savedWidth + 'px';
+    }
+    
+    let startX = 0;
+    let startWidth = 0;
+    let activeHandle = null;
+    
+    function startResize(e, handle, isLeftHandle) {
+        isResizing = true;
+        activeHandle = handle;
+        startX = e.clientX;
+        startWidth = parseInt(document.defaultView.getComputedStyle(filePanel).width, 10);
+        
+        handle.classList.add('dragging');
+        document.body.classList.add('resizing');
+        
+        e.preventDefault();
+    }
+    
+    // Left handle (resize from left edge)
+    leftResizeHandle.addEventListener('mousedown', (e) => {
+        startResize(e, leftResizeHandle, true);
+    });
+    
+    // Right handle (resize from right edge)
+    rightResizeHandle.addEventListener('mousedown', (e) => {
+        startResize(e, rightResizeHandle, false);
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing || !activeHandle) return;
+        
+        let width;
+        const minWidth = 200;
+        const maxWidth = 600;
+        
+        if (activeHandle === leftResizeHandle) {
+            // Left handle: dragging left increases width, dragging right decreases width
+            width = startWidth + (startX - e.clientX);
+        } else {
+            // Right handle: dragging right increases width, dragging left decreases width
+            width = startWidth + (e.clientX - startX);
+        }
+        
+        if (width >= minWidth && width <= maxWidth) {
+            filePanel.style.width = width + 'px';
+        }
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            if (activeHandle) {
+                activeHandle.classList.remove('dragging');
+                activeHandle = null;
+            }
+            document.body.classList.remove('resizing');
+            
+            // Save the new width
+            const currentWidth = parseInt(document.defaultView.getComputedStyle(filePanel).width, 10);
+            localStorage.setItem(FILE_PANEL_WIDTH_KEY, currentWidth);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const appWindow = getCurrentWindow();
     
@@ -392,6 +594,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize recent repositories menu
     updateRecentRepositoriesMenu();
+    
+    // Initialize panel resizing
+    initializePanelResizing();
+    
+    // Initialize file keyboard navigation
+    initializeFileKeyboardNavigation();
     
     loadGitBranches();
 });

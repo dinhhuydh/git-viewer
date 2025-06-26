@@ -23,9 +23,22 @@
         }
         .file-panel {
             width: 300px;
+            min-width: 200px;
+            max-width: 600px;
             background-color: white;
             border-left: 1px solid #dee2e6;
             overflow-y: auto;
+            position: relative;
+        }
+        .file-panel:focus {
+            outline: 2px solid #007acc;
+            outline-offset: -2px;
+        }
+        #file-changes {
+            outline: none;
+        }
+        #file-changes:focus {
+            outline: none;
         }
         .diff-panel {
             flex: 1;
@@ -158,6 +171,31 @@
             text-align: center;
             color: #666;
             font-style: italic;
+        }
+        .resize-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background-color: transparent;
+            cursor: col-resize;
+            z-index: 10;
+            transition: background-color 0.2s;
+        }
+        .resize-handle.left {
+            left: 0;
+        }
+        .resize-handle.right {
+            right: 0;
+        }
+        .resize-handle:hover {
+            background-color: #007acc;
+        }
+        .resize-handle.dragging {
+            background-color: #007acc;
+        }
+        .resizing {
+            user-select: none;
         }
         .sidebar-header {
             padding: 15px;
@@ -329,7 +367,9 @@
         </div>
 
         <!-- File Changes Panel -->
-        <div class="file-panel">
+        <div class="file-panel" id="file-panel" tabindex="0">
+            <div class="resize-handle left" id="file-panel-resize-left"></div>
+            <div class="resize-handle right" id="file-panel-resize-right"></div>
             <div class="panel-header">File Changes</div>
             <div id="file-changes">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a commit to view file changes</p>
