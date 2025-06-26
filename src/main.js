@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 let currentRepoPath = null;
 
@@ -50,7 +51,13 @@ async function openRepository() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('open-repo-btn').addEventListener('click', openRepository);
+document.addEventListener('DOMContentLoaded', async () => {
+    const appWindow = getCurrentWindow();
+    
+    // Listen for menu events
+    await appWindow.listen('menu-open-repo', () => {
+        openRepository();
+    });
+    
     loadGitBranches();
 });

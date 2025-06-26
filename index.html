@@ -39,37 +39,30 @@
             border-left-color: #007acc;
             font-weight: bold;
         }
-        .toolbar {
+        .repo-info {
             margin: 20px 0;
             padding: 15px;
             background-color: #f8f9fa;
             border-radius: 6px;
             border: 1px solid #dee2e6;
-        }
-        .toolbar button {
-            background-color: #007acc;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .toolbar button:hover {
-            background-color: #0056b3;
+            min-height: 20px;
         }
         #current-repo-path {
-            margin-left: 15px;
             color: #666;
             font-family: monospace;
+            font-size: 14px;
+        }
+        #current-repo-path:empty::before {
+            content: "Use File > Open Repository to select a git repository";
+            color: #999;
+            font-style: italic;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Git Viewer</h1>
-        <div class="toolbar">
-            <button id="open-repo-btn">Open Repository</button>
+        <div class="repo-info">
             <span id="current-repo-path"></span>
         </div>
         <h2>Branches</h2>

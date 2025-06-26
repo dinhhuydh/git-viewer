@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::Path;
+use tauri::Emitter;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitBranch {
@@ -50,11 +51,16 @@ fn get_git_branches_from_path(path: String) -> Result<Vec<GitBranch>, String> {
     Ok(branches)
 }
 
+#[tauri::command]
+fn open_repo_dialog(app: tauri::AppHandle) {
+    let _ = app.emit("menu-open-repo", ());
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path])
+    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, open_repo_dialog])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -64,6 +70,56 @@ pub fn run() {
         )?;
       }
       Ok(())
+    })
+    .on_menu_event(|app, event| {
+      match event.id().as_ref() {
+        "open_repo" => {
+          let _ = app.emit("menu-open-repo", ());
+        }
+        _ => {}
+      }
+    })
+    .menu(|app| {
+      #[cfg(target_os = "macos")]
+      {
+        use tauri::menu::*;
+        
+        let app_menu = SubmenuBuilder::new(app, "Git Viewer")
+          .about(None)
+          .separator()
+          .quit()
+          .build()?;
+          
+        let file_menu = SubmenuBuilder::new(app, "File")
+          .item(&MenuItemBuilder::with_id("open_repo", "Open Repository...")
+            .accelerator("Cmd+O")
+            .build(app)?)
+          .separator()
+          .close_window()
+          .build()?;
+          
+        MenuBuilder::new(app)
+          .item(&app_menu)
+          .item(&file_menu)
+          .build()
+      }
+      
+      #[cfg(not(target_os = "macos"))]
+      {
+        use tauri::menu::*;
+        
+        let file_menu = SubmenuBuilder::new(app, "File")
+          .item(&MenuItemBuilder::with_id("open_repo", "Open Repository...")
+            .accelerator("Ctrl+O")
+            .build(app)?)
+          .separator()
+          .quit()
+          .build()?;
+          
+        MenuBuilder::new(app)
+          .item(&file_menu)
+          .build()
+      }
     })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
