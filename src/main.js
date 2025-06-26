@@ -18,27 +18,20 @@ async function loadGitBranches(repoPath = null) {
         displayBranches(branches);
     } catch (error) {
         console.error('Error loading git branches:', error);
-        document.getElementById('branches').innerHTML = `<p>Error: ${error}</p>`;
+        const branchSelector = document.getElementById('branch-selector');
+        if (branchSelector) {
+            branchSelector.innerHTML = '<option value="">Error loading branches</option>';
+        }
     }
 }
 
 function displayBranches(branches) {
-    const branchesDiv = document.getElementById('branches');
     const branchSelector = document.getElementById('branch-selector');
     
     if (branches.length === 0) {
-        branchesDiv.innerHTML = '<p>No branches found</p>';
         branchSelector.innerHTML = '<option value="">No branches found</option>';
         return;
     }
-    
-    const branchList = branches.map(branch => 
-        `<li class="${branch.is_current ? 'current-branch' : ''}" data-branch="${branch.name}">
-            ${branch.name} ${branch.is_current ? '(current)' : ''}
-        </li>`
-    ).join('');
-    
-    branchesDiv.innerHTML = `<ul>${branchList}</ul>`;
     
     // Populate branch selector dropdown
     const branchOptions = branches.map(branch => 
@@ -46,23 +39,15 @@ function displayBranches(branches) {
     ).join('');
     branchSelector.innerHTML = branchOptions;
     
-    // Add change listener to branch selector
-    branchSelector.addEventListener('change', (e) => {
+    // Add change listener to branch selector (remove existing listeners first)
+    const newBranchSelector = branchSelector.cloneNode(true);
+    branchSelector.parentNode.replaceChild(newBranchSelector, branchSelector);
+    
+    newBranchSelector.addEventListener('change', (e) => {
         const selectedBranch = e.target.value;
         if (selectedBranch) {
             selectBranch(selectedBranch);
         }
-    });
-    
-    // Add click listeners to branches in main panel
-    branchesDiv.querySelectorAll('li[data-branch]').forEach(branchItem => {
-        branchItem.addEventListener('click', () => {
-            const branchName = branchItem.dataset.branch;
-            selectBranch(branchName);
-            // Update selector to match clicked branch
-            branchSelector.value = branchName;
-        });
-        branchItem.style.cursor = 'pointer';
     });
     
     // Automatically select current branch if available
@@ -76,12 +61,6 @@ async function selectBranch(branchName) {
     if (!currentRepoPath) return;
     
     currentBranch = branchName;
-    
-    // Update branch selection UI in main panel
-    document.querySelectorAll('[data-branch]').forEach(item => {
-        item.classList.remove('selected');
-    });
-    document.querySelector(`[data-branch="${branchName}"]`)?.classList.add('selected');
     
     // Update branch selector dropdown
     const branchSelector = document.getElementById('branch-selector');
@@ -263,6 +242,17 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function updateRepositoryName(repoPath) {
+    const repoNameElement = document.getElementById('repo-name');
+    if (repoPath) {
+        // Extract just the folder name from the full path
+        const repoName = repoPath.split('/').pop() || repoPath;
+        repoNameElement.textContent = repoName;
+    } else {
+        repoNameElement.textContent = '';
+    }
+}
+
 async function openRepository() {
     try {
         const selected = await open({
@@ -273,11 +263,15 @@ async function openRepository() {
         if (selected) {
             currentRepoPath = selected;
             document.getElementById('current-repo-path').textContent = selected;
+            updateRepositoryName(selected);
             await loadGitBranches(selected);
         }
     } catch (error) {
         console.error('Error opening repository:', error);
-        document.getElementById('branches').innerHTML = `<p>Error: ${error}</p>`;
+        const branchSelector = document.getElementById('branch-selector');
+        if (branchSelector) {
+            branchSelector.innerHTML = '<option value="">Error loading repository</option>';
+        }
     }
 }
 
