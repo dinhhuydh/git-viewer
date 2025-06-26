@@ -1,6 +1,37 @@
+use serde::{Deserialize, Serialize};
+use std::env;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GitBranch {
+    name: String,
+    is_current: bool,
+}
+
+#[tauri::command]
+fn get_git_branches() -> Result<Vec<GitBranch>, String> {
+    let current_dir = env::current_dir().map_err(|e| e.to_string())?;
+    let repo = git2::Repository::discover(current_dir).map_err(|e| e.to_string())?;
+    
+    let mut branches = Vec::new();
+    let branch_iter = repo.branches(Some(git2::BranchType::Local)).map_err(|e| e.to_string())?;
+    
+    for branch_result in branch_iter {
+        let (branch, _) = branch_result.map_err(|e| e.to_string())?;
+        if let Some(name) = branch.name().map_err(|e| e.to_string())? {
+            branches.push(GitBranch {
+                name: name.to_string(),
+                is_current: branch.is_head()
+            });
+        }
+    }
+    
+    Ok(branches)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![get_git_branches])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

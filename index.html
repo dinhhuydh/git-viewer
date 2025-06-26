@@ -4,11 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Git Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+        }
+        #branches ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        #branches li {
+            padding: 8px 12px;
+            margin: 4px 0;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border-left: 3px solid #dee2e6;
+        }
+        #branches li.current-branch {
+            background-color: #e7f3ff;
+            border-left-color: #007acc;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-    <div id="app">
+    <div class="container">
         <h1>Git Viewer</h1>
-        <p>Welcome to Git Viewer!</p>
+        <h2>Branches</h2>
+        <div id="branches">
+            <p>Loading branches...</p>
+        </div>
     </div>
     <script type="module" src="/src/main.js"></script>
 </body>
