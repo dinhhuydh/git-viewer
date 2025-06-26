@@ -7,16 +7,38 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            margin: 0;
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 800px;
-            margin: 0 auto;
+            display: flex;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+        .main-content {
+            flex: 1;
             background-color: white;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        .commits-sidebar {
+            width: 300px;
+            background-color: white;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto;
+        }
+        .file-panel {
+            width: 300px;
+            background-color: white;
+            border-left: 1px solid #dee2e6;
+            overflow-y: auto;
+        }
+        .diff-panel {
+            width: 450px;
+            background-color: white;
+            border-left: 1px solid #dee2e6;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
         }
         h1 {
             color: #333;
@@ -39,6 +61,13 @@
             border-left-color: #007acc;
             font-weight: bold;
         }
+        #branches li:hover {
+            background-color: #f8f9fa;
+        }
+        #branches li.selected {
+            background-color: #d4edda;
+            border-left-color: #28a745;
+        }
         .repo-info {
             margin: 20px 0;
             padding: 15px;
@@ -57,17 +86,164 @@
             color: #999;
             font-style: italic;
         }
+        .sidebar-header {
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: bold;
+        }
+        .commit-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .commit-item:hover {
+            background-color: #f8f9fa;
+        }
+        .commit-item.selected {
+            background-color: #e7f3ff;
+            border-left: 3px solid #007acc;
+        }
+        .commit-message {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .commit-meta {
+            font-size: 12px;
+            color: #666;
+        }
+        .commit-id {
+            font-family: monospace;
+            background-color: #f1f1f1;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+        .file-item {
+            padding: 8px 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .file-item:hover {
+            background-color: #f8f9fa;
+        }
+        .file-item.selected {
+            background-color: #e7f3ff;
+            border-left: 3px solid #007acc;
+        }
+        .file-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .file-status.added { background-color: #28a745; }
+        .file-status.modified { background-color: #ffc107; }
+        .file-status.deleted { background-color: #dc3545; }
+        .file-path {
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .panel-header {
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: bold;
+        }
+        .diff-line {
+            display: flex;
+            border-bottom: 1px solid #f1f1f1;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .line-numbers {
+            background-color: #f8f9fa;
+            color: #666;
+            padding: 2px 8px;
+            min-width: 80px;
+            text-align: right;
+            border-right: 1px solid #dee2e6;
+            user-select: none;
+            font-size: 11px;
+        }
+        .line-content {
+            padding: 2px 8px;
+            flex: 1;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .diff-line.addition {
+            background-color: #e6ffed;
+        }
+        .diff-line.addition .line-content {
+            background-color: #acf2bd;
+        }
+        .diff-line.deletion {
+            background-color: #ffeef0;
+        }
+        .diff-line.deletion .line-content {
+            background-color: #fdb8c0;
+        }
+        .diff-line.context {
+            background-color: white;
+        }
+        .diff-header {
+            background-color: #f1f8ff;
+            padding: 10px;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: bold;
+            color: #0366d6;
+        }
+        .binary-file {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Git Viewer</h1>
-        <div class="repo-info">
-            <span id="current-repo-path"></span>
+        <!-- Commits Sidebar -->
+        <div class="commits-sidebar">
+            <div class="sidebar-header">Commits</div>
+            <div id="commits">
+                <p style="padding: 15px; color: #666; font-style: italic;">Select a branch to view commits</p>
+            </div>
         </div>
-        <h2>Branches</h2>
-        <div id="branches">
-            <p>Loading branches...</p>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <h1>Git Viewer</h1>
+            <div class="repo-info">
+                <span id="current-repo-path"></span>
+            </div>
+            <h2>Branches</h2>
+            <div id="branches">
+                <p>Loading branches...</p>
+            </div>
+        </div>
+
+        <!-- File Changes Panel -->
+        <div class="file-panel">
+            <div class="panel-header">File Changes</div>
+            <div id="file-changes">
+                <p style="padding: 15px; color: #666; font-style: italic;">Select a commit to view file changes</p>
+            </div>
+        </div>
+
+        <!-- File Diff Panel -->
+        <div class="diff-panel">
+            <div class="panel-header">File Diff</div>
+            <div id="file-diff">
+                <p style="padding: 15px; color: #666; font-style: italic;">Select a file to view changes</p>
+            </div>
         </div>
     </div>
     <script type="module" src="/src/main.js"></script>
