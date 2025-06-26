@@ -15,12 +15,6 @@
             height: calc(100vh - 60px);
             background-color: #f5f5f5;
         }
-        .main-content {
-            flex: 1;
-            background-color: white;
-            padding: 20px;
-            overflow-y: auto;
-        }
         .commits-sidebar {
             width: 300px;
             background-color: white;
@@ -34,7 +28,7 @@
             overflow-y: auto;
         }
         .diff-panel {
-            width: 450px;
+            flex: 1;
             background-color: white;
             border-left: 1px solid #dee2e6;
             overflow-y: auto;
@@ -67,24 +61,6 @@
         #branches li.selected {
             background-color: #d4edda;
             border-left-color: #28a745;
-        }
-        .repo-info {
-            margin: 20px 0;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #dee2e6;
-            min-height: 20px;
-        }
-        #current-repo-path {
-            color: #666;
-            font-family: monospace;
-            font-size: 14px;
-        }
-        #current-repo-path:empty::before {
-            content: "Use File > Open Repository to select a git repository";
-            color: #999;
-            font-style: italic;
         }
         .app-header {
             background-color: #f8f9fa;
@@ -268,13 +244,6 @@
             </div>
             <div id="commits">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a branch to view commits</p>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="main-content">
-            <div class="repo-info">
-                <span id="current-repo-path"></span>
             </div>
         </div>
 

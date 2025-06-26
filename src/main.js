@@ -262,7 +262,6 @@ async function openRepository() {
         
         if (selected) {
             currentRepoPath = selected;
-            document.getElementById('current-repo-path').textContent = selected;
             updateRepositoryName(selected);
             await loadGitBranches(selected);
         }
