@@ -618,7 +618,6 @@ function initializeFileKeyboardNavigation() {
 
 function initializePanelResizing() {
     const filePanel = document.getElementById('file-panel');
-    const leftResizeHandle = document.getElementById('file-panel-resize-left');
     const rightResizeHandle = document.getElementById('file-panel-resize-right');
     
     // Load saved width
@@ -629,44 +628,26 @@ function initializePanelResizing() {
     
     let startX = 0;
     let startWidth = 0;
-    let activeHandle = null;
-    
-    function startResize(e, handle, isLeftHandle) {
-        isResizing = true;
-        activeHandle = handle;
-        startX = e.clientX;
-        startWidth = parseInt(document.defaultView.getComputedStyle(filePanel).width, 10);
-        
-        handle.classList.add('dragging');
-        document.body.classList.add('resizing');
-        
-        e.preventDefault();
-    }
-    
-    // Left handle (resize from left edge)
-    leftResizeHandle.addEventListener('mousedown', (e) => {
-        startResize(e, leftResizeHandle, true);
-    });
     
     // Right handle (resize from right edge)
     rightResizeHandle.addEventListener('mousedown', (e) => {
-        startResize(e, rightResizeHandle, false);
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = parseInt(document.defaultView.getComputedStyle(filePanel).width, 10);
+        
+        rightResizeHandle.classList.add('dragging');
+        document.body.classList.add('resizing');
+        
+        e.preventDefault();
     });
     
     document.addEventListener('mousemove', (e) => {
-        if (!isResizing || !activeHandle) return;
+        if (!isResizing) return;
         
-        let width;
+        // Right handle: dragging right increases width, dragging left decreases width
+        const width = startWidth + (e.clientX - startX);
         const minWidth = 200;
         const maxWidth = 600;
-        
-        if (activeHandle === leftResizeHandle) {
-            // Left handle: dragging left increases width, dragging right decreases width
-            width = startWidth + (startX - e.clientX);
-        } else {
-            // Right handle: dragging right increases width, dragging left decreases width
-            width = startWidth + (e.clientX - startX);
-        }
         
         if (width >= minWidth && width <= maxWidth) {
             filePanel.style.width = width + 'px';
@@ -676,10 +657,7 @@ function initializePanelResizing() {
     document.addEventListener('mouseup', () => {
         if (isResizing) {
             isResizing = false;
-            if (activeHandle) {
-                activeHandle.classList.remove('dragging');
-                activeHandle = null;
-            }
+            rightResizeHandle.classList.remove('dragging');
             document.body.classList.remove('resizing');
             
             // Save the new width
