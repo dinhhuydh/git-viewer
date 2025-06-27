@@ -17,9 +17,12 @@
         }
         .commits-sidebar {
             width: 300px;
+            min-width: 200px;
+            max-width: 600px;
             background-color: white;
             border-right: 1px solid #dee2e6;
             overflow-y: auto;
+            position: relative;
         }
         .commits-sidebar:focus {
             outline: 2px solid #007acc;
@@ -362,6 +365,7 @@
     <div class="container">
         <!-- Commits Sidebar -->
         <div class="commits-sidebar" id="commits-sidebar" tabindex="0">
+            <div class="resize-handle right" id="commits-sidebar-resize-right"></div>
             <div class="sidebar-header">
                 Commits
                 <select id="branch-selector" class="branch-selector">

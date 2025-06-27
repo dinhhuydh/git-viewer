@@ -13,6 +13,7 @@ const MAX_RECENT_REPOS = 10;
 
 // Panel resizing
 const FILE_PANEL_WIDTH_KEY = 'git-viewer-file-panel-width';
+const COMMITS_SIDEBAR_WIDTH_KEY = 'git-viewer-commits-sidebar-width';
 let isResizing = false;
 
 // File navigation
@@ -617,6 +618,14 @@ function initializeFileKeyboardNavigation() {
 }
 
 function initializePanelResizing() {
+    // Initialize file panel resizing
+    initializeFilePanelResizing();
+    
+    // Initialize commits sidebar resizing
+    initializeCommitsSidebarResizing();
+}
+
+function initializeFilePanelResizing() {
     const filePanel = document.getElementById('file-panel');
     const rightResizeHandle = document.getElementById('file-panel-resize-right');
     
@@ -628,9 +637,11 @@ function initializePanelResizing() {
     
     let startX = 0;
     let startWidth = 0;
+    let isFilePanelResizing = false;
     
     // Right handle (resize from right edge)
     rightResizeHandle.addEventListener('mousedown', (e) => {
+        isFilePanelResizing = true;
         isResizing = true;
         startX = e.clientX;
         startWidth = parseInt(document.defaultView.getComputedStyle(filePanel).width, 10);
@@ -642,7 +653,7 @@ function initializePanelResizing() {
     });
     
     document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
+        if (!isFilePanelResizing) return;
         
         // Right handle: dragging right increases width, dragging left decreases width
         const width = startWidth + (e.clientX - startX);
@@ -655,7 +666,8 @@ function initializePanelResizing() {
     });
     
     document.addEventListener('mouseup', () => {
-        if (isResizing) {
+        if (isFilePanelResizing) {
+            isFilePanelResizing = false;
             isResizing = false;
             rightResizeHandle.classList.remove('dragging');
             document.body.classList.remove('resizing');
@@ -663,6 +675,60 @@ function initializePanelResizing() {
             // Save the new width
             const currentWidth = parseInt(document.defaultView.getComputedStyle(filePanel).width, 10);
             localStorage.setItem(FILE_PANEL_WIDTH_KEY, currentWidth);
+        }
+    });
+}
+
+function initializeCommitsSidebarResizing() {
+    const commitsSidebar = document.getElementById('commits-sidebar');
+    const rightResizeHandle = document.getElementById('commits-sidebar-resize-right');
+    
+    // Load saved width
+    const savedWidth = localStorage.getItem(COMMITS_SIDEBAR_WIDTH_KEY);
+    if (savedWidth) {
+        commitsSidebar.style.width = savedWidth + 'px';
+    }
+    
+    let startX = 0;
+    let startWidth = 0;
+    let isCommitsSidebarResizing = false;
+    
+    // Right handle (resize from right edge)
+    rightResizeHandle.addEventListener('mousedown', (e) => {
+        isCommitsSidebarResizing = true;
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = parseInt(document.defaultView.getComputedStyle(commitsSidebar).width, 10);
+        
+        rightResizeHandle.classList.add('dragging');
+        document.body.classList.add('resizing');
+        
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isCommitsSidebarResizing) return;
+        
+        // Right handle: dragging right increases width, dragging left decreases width
+        const width = startWidth + (e.clientX - startX);
+        const minWidth = 200;
+        const maxWidth = 600;
+        
+        if (width >= minWidth && width <= maxWidth) {
+            commitsSidebar.style.width = width + 'px';
+        }
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isCommitsSidebarResizing) {
+            isCommitsSidebarResizing = false;
+            isResizing = false;
+            rightResizeHandle.classList.remove('dragging');
+            document.body.classList.remove('resizing');
+            
+            // Save the new width
+            const currentWidth = parseInt(document.defaultView.getComputedStyle(commitsSidebar).width, 10);
+            localStorage.setItem(COMMITS_SIDEBAR_WIDTH_KEY, currentWidth);
         }
     });
 }
