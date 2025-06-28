@@ -24,6 +24,10 @@ let fileItems = [];
 let currentCommitIndex = -1;
 let commitItems = [];
 
+// File filtering
+let allFileItems = [];
+let filteredFileItems = [];
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -180,10 +184,14 @@ function displayFileChanges(changes) {
     const changesDiv = document.getElementById('file-changes');
     if (changes.length === 0) {
         changesDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No file changes found</p>';
+        allFileItems = [];
+        filteredFileItems = [];
         fileItems = [];
         currentFileIndex = -1;
         // Clear diff panel when no files
         document.getElementById('file-diff').innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">Select a file to view changes</p>';
+        // Clear filter
+        document.getElementById('file-filter').value = '';
         return;
     }
     
@@ -196,20 +204,24 @@ function displayFileChanges(changes) {
     
     changesDiv.innerHTML = changesList;
     
-    // Update file items array for keyboard navigation
-    fileItems = Array.from(changesDiv.querySelectorAll('.file-item'));
+    // Update file items arrays
+    allFileItems = Array.from(changesDiv.querySelectorAll('.file-item'));
+    filteredFileItems = [...allFileItems];
+    fileItems = [...allFileItems];
     currentFileIndex = -1;
     
     // Add click listeners to files
-    fileItems.forEach((fileItem, index) => {
+    allFileItems.forEach((fileItem, index) => {
         fileItem.addEventListener('click', () => {
             const filePath = fileItem.dataset.filePath;
-            currentFileIndex = index;
+            // Find index in filtered results for proper navigation
+            currentFileIndex = filteredFileItems.indexOf(fileItem);
             selectFile(filePath);
         });
     });
     
-    // Auto-select first file if available
+    // Clear filter and auto-select first file if available
+    document.getElementById('file-filter').value = '';
     if (fileItems.length > 0) {
         const firstFilePath = fileItems[0].dataset.filePath;
         currentFileIndex = 0;
@@ -417,6 +429,47 @@ async function openRepository(repoPath = null) {
     }
 }
 
+function filterFiles(filterText) {
+    const filterLower = filterText.toLowerCase();
+    
+    // Reset all files visibility
+    allFileItems.forEach(item => {
+        item.classList.remove('hidden');
+    });
+    
+    if (filterText.trim() === '') {
+        // Show all files
+        filteredFileItems = [...allFileItems];
+        fileItems = [...allFileItems];
+    } else {
+        // Filter files based on path
+        filteredFileItems = allFileItems.filter(item => {
+            const filePath = item.dataset.filePath.toLowerCase();
+            const matches = filePath.includes(filterLower);
+            if (!matches) {
+                item.classList.add('hidden');
+            }
+            return matches;
+        });
+        fileItems = [...filteredFileItems];
+    }
+    
+    // Reset selection
+    allFileItems.forEach(item => item.classList.remove('selected'));
+    currentFileIndex = -1;
+    
+    // Auto-select first visible file
+    if (filteredFileItems.length > 0) {
+        const firstFilePath = filteredFileItems[0].dataset.filePath;
+        currentFileIndex = 0;
+        filteredFileItems[0].classList.add('selected');
+        selectFile(firstFilePath);
+    } else {
+        // No matches, clear diff panel
+        document.getElementById('file-diff').innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No files match the filter</p>';
+    }
+}
+
 function navigateToFileIndex(index) {
     if (fileItems.length === 0 || index < 0 || index >= fileItems.length) {
         return;
@@ -426,8 +479,8 @@ function navigateToFileIndex(index) {
     const fileItem = fileItems[index];
     const filePath = fileItem.dataset.filePath;
     
-    // Update selection UI
-    fileItems.forEach(item => item.classList.remove('selected'));
+    // Update selection UI (only on visible files)
+    allFileItems.forEach(item => item.classList.remove('selected'));
     fileItem.classList.add('selected');
     
     // Scroll into view if needed
@@ -573,10 +626,34 @@ function initializeCommitKeyboardNavigation() {
     });
 }
 
+function initializeFileFiltering() {
+    const filterInput = document.getElementById('file-filter');
+    
+    // Real-time filtering as user types
+    filterInput.addEventListener('input', (e) => {
+        filterFiles(e.target.value);
+    });
+    
+    // Clear filter with Escape key
+    filterInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            filterInput.value = '';
+            filterFiles('');
+            filterInput.blur();
+        }
+    });
+}
+
 function initializeFileKeyboardNavigation() {
     const filePanel = document.getElementById('file-panel');
+    const filterInput = document.getElementById('file-filter');
     
     filePanel.addEventListener('keydown', (e) => {
+        // Don't handle navigation if filter input is focused
+        if (document.activeElement === filterInput) {
+            return;
+        }
+        
         // Only handle navigation if the file panel is focused and we have files
         if (document.activeElement !== filePanel || fileItems.length === 0) {
             return;
@@ -615,13 +692,19 @@ function initializeFileKeyboardNavigation() {
                     selectFile(filePath);
                 }
                 break;
+            case '/':
+            case 'f':
+                // Focus filter input with / or f key
+                e.preventDefault();
+                filterInput.focus();
+                break;
         }
     });
     
     // Focus file panel when clicking on it
     filePanel.addEventListener('click', (e) => {
-        // Don't focus if clicking on resize handles
-        if (!e.target.classList.contains('resize-handle')) {
+        // Don't focus if clicking on resize handles or filter input
+        if (!e.target.classList.contains('resize-handle') && e.target !== filterInput) {
             filePanel.focus();
         }
     });
@@ -782,6 +865,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize commit keyboard navigation
     initializeCommitKeyboardNavigation();
+    
+    // Initialize file filtering
+    initializeFileFiltering();
     
     loadGitBranches();
 });

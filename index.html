@@ -293,6 +293,33 @@
             border-bottom: 1px solid #dee2e6;
             font-weight: bold;
         }
+        .panel-header-with-filter {
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: bold;
+        }
+        .filter-input {
+            width: 100%;
+            padding: 6px 10px;
+            margin-top: 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 12px;
+            background-color: white;
+        }
+        .filter-input:focus {
+            outline: none;
+            border-color: #007acc;
+            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+        }
+        .filter-input::placeholder {
+            color: #999;
+            font-style: italic;
+        }
+        .file-item.hidden {
+            display: none;
+        }
         .diff-line {
             display: flex;
             border-bottom: 1px solid #f1f1f1;
@@ -380,7 +407,10 @@
         <!-- File Changes Panel -->
         <div class="file-panel" id="file-panel" tabindex="0">
             <div class="resize-handle right" id="file-panel-resize-right"></div>
-            <div class="panel-header">File Changes</div>
+            <div class="panel-header-with-filter">
+                File Changes
+                <input type="text" class="filter-input" id="file-filter" placeholder="Filter files..." />
+            </div>
             <div id="file-changes">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a commit to view file changes</p>
             </div>
