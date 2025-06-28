@@ -182,6 +182,8 @@ function displayFileChanges(changes) {
         changesDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No file changes found</p>';
         fileItems = [];
         currentFileIndex = -1;
+        // Clear diff panel when no files
+        document.getElementById('file-diff').innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">Select a file to view changes</p>';
         return;
     }
     
@@ -206,6 +208,14 @@ function displayFileChanges(changes) {
             selectFile(filePath);
         });
     });
+    
+    // Auto-select first file if available
+    if (fileItems.length > 0) {
+        const firstFilePath = fileItems[0].dataset.filePath;
+        currentFileIndex = 0;
+        fileItems[0].classList.add('selected');
+        selectFile(firstFilePath);
+    }
 }
 
 async function selectFile(filePath) {
