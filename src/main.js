@@ -148,6 +148,18 @@ function displayCommits(commits) {
             selectCommit(commitId);
         });
     });
+    
+    // Add dedicated click listeners to commit hash elements
+    commitItems.forEach((commitItem) => {
+        const commitHashElement = commitItem.querySelector('.commit-id');
+        if (commitHashElement) {
+            commitHashElement.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                copyCommitHashToClipboard(commitItem.dataset.commitId, commitHashElement);
+            });
+        }
+    });
 }
 
 async function selectCommit(commitId) {
@@ -890,6 +902,18 @@ function displaySearchResults(results, query) {
             hideSearchResults();
         });
     });
+    
+    // Add dedicated click listeners to search result commit hash elements
+    searchOverlay.querySelectorAll('.search-result-commit-hash').forEach(hashElement => {
+        hashElement.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const resultItem = hashElement.closest('.search-result-item');
+            if (resultItem) {
+                copyCommitHashToClipboard(resultItem.dataset.commitId, hashElement);
+            }
+        });
+    });
 }
 
 function highlightSearchTerm(text, query) {
@@ -1108,6 +1132,45 @@ function initializeCommitsSidebarResizing() {
             localStorage.setItem(COMMITS_SIDEBAR_WIDTH_KEY, currentWidth);
         }
     });
+}
+
+async function copyCommitHashToClipboard(commitId, element) {
+    try {
+        await navigator.clipboard.writeText(commitId);
+        
+        // Visual feedback
+        const originalText = element.textContent;
+        const originalBg = element.style.backgroundColor;
+        
+        // Show copied feedback
+        element.style.backgroundColor = '#28a745';
+        element.style.color = 'white';
+        element.textContent = 'Copied!';
+        
+        // Reset after 1 second
+        setTimeout(() => {
+            element.style.backgroundColor = originalBg;
+            element.style.color = '';
+            element.textContent = originalText;
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Failed to copy commit hash:', error);
+        
+        // Fallback feedback for error
+        const originalText = element.textContent;
+        const originalBg = element.style.backgroundColor;
+        
+        element.style.backgroundColor = '#dc3545';
+        element.style.color = 'white';
+        element.textContent = 'Failed';
+        
+        setTimeout(() => {
+            element.style.backgroundColor = originalBg;
+            element.style.color = '';
+            element.textContent = originalText;
+        }, 1000);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

@@ -212,6 +212,18 @@
             padding: 1px 4px;
             border-radius: 3px;
             margin-right: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s, transform 0.1s;
+            user-select: none;
+            display: inline-block;
+        }
+        .search-result-commit-hash:hover {
+            background-color: #007acc;
+            color: white;
+            transform: scale(1.05);
+        }
+        .search-result-commit-hash:active {
+            transform: scale(0.95);
         }
         .recent-repos-container {
             position: relative;
@@ -356,6 +368,18 @@
             padding: 2px 4px;
             border-radius: 3px;
             margin-right: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            user-select: none;
+            display: inline-block;
+        }
+        .commit-id:hover {
+            background-color: #007acc;
+            color: white;
+            transform: scale(1.05);
+        }
+        .commit-id:active {
+            transform: scale(0.95);
         }
         .file-item {
             padding: 8px 15px;
