@@ -56,6 +56,23 @@ pub struct SearchResult {
     line_number: Option<u32>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BlameInfo {
+    commit_id: String,
+    commit_short_id: String,
+    author: String,
+    date: String,
+    line_number: u32,
+    content: String,
+    commit_message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileBlame {
+    path: String,
+    blame_lines: Vec<BlameInfo>,
+}
+
 #[tauri::command]
 fn get_git_branches() -> Result<Vec<GitBranch>, String> {
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
@@ -521,11 +538,104 @@ fn search_commit_files_and_content(
     Ok(())
 }
 
+#[tauri::command]
+fn get_file_blame(path: String, commit_id: String, file_path: String) -> Result<FileBlame, String> {
+    let repo_path = Path::new(&path);
+    let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    // Get the commit
+    let oid = git2::Oid::from_str(&commit_id).map_err(|e| e.to_string())?;
+    let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    
+    // Get the tree
+    let tree = commit.tree().map_err(|e| e.to_string())?;
+    
+    // Find the file in the tree
+    let tree_entry = tree.get_path(Path::new(&file_path)).map_err(|e| {
+        format!("File '{}' not found in commit '{}': {}", file_path, commit_id, e)
+    })?;
+    
+    // Get the blob
+    let blob = repo.find_blob(tree_entry.id()).map_err(|e| e.to_string())?;
+    
+    // Check if file is binary
+    if blob.is_binary() {
+        return Err("Cannot show blame for binary files".to_string());
+    }
+    
+    // Create blame options
+    let mut blame_options = git2::BlameOptions::new();
+    blame_options.track_copies_same_commit_moves(true);
+    blame_options.track_copies_same_commit_copies(true);
+    
+    // Get blame for the file
+    let blame = repo.blame_file(Path::new(&file_path), Some(&mut blame_options)).map_err(|e| e.to_string())?;
+    
+    // Get file content
+    let content = String::from_utf8(blob.content().to_vec()).map_err(|e| format!("File is not valid UTF-8: {}", e))?;
+    
+    let mut blame_lines = Vec::new();
+    
+    for (line_num, line_content) in content.lines().enumerate() {
+        let line_number = (line_num + 1) as u32;
+        
+        // Get blame info for this line
+        if let Some(hunk) = blame.get_line(line_number as usize) {
+            let commit_oid = hunk.final_commit_id();
+            let blame_commit = repo.find_commit(commit_oid).map_err(|e| e.to_string())?;
+            
+            // Get author and date info
+            let author = blame_commit.author();
+            let author_name = author.name().unwrap_or("Unknown").to_string();
+            let commit_time = blame_commit.time();
+            
+            // Format date
+            let date = chrono::DateTime::from_timestamp(commit_time.seconds(), 0)
+                .map(|dt| dt.format("%Y-%m-%d").to_string())
+                .unwrap_or_else(|| "Unknown".to_string());
+            
+            // Get commit message (first line only)
+            let commit_message = blame_commit.message()
+                .unwrap_or("No message")
+                .lines()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            
+            blame_lines.push(BlameInfo {
+                commit_id: commit_oid.to_string(),
+                commit_short_id: commit_oid.to_string()[..8].to_string(),
+                author: author_name,
+                date,
+                line_number,
+                content: line_content.to_string(),
+                commit_message,
+            });
+        } else {
+            // Fallback for lines without blame info
+            blame_lines.push(BlameInfo {
+                commit_id: commit_id.clone(),
+                commit_short_id: commit_id[..8].to_string(),
+                author: "Unknown".to_string(),
+                date: "Unknown".to_string(),
+                line_number,
+                content: line_content.to_string(),
+                commit_message: "Unknown".to_string(),
+            });
+        }
+    }
+    
+    Ok(FileBlame {
+        path: file_path,
+        blame_lines,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search])
+    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

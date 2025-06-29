@@ -106,9 +106,9 @@ npm run tauri build
 
 #### Code Intelligence
 - [ ] **Jump to Definition** - Navigate to function/class definitions
-- [ ] **Blame View** - See who changed each line
+- [x] **Blame View** - See who changed each line
 - [ ] **File History** - Track file changes across branches
-- [ ] **Copy Commit Hash** - Quick clipboard operations
+- [x] **Copy Commit Hash** - Quick clipboard operations
 - [ ] **Export Diff as Patch** - Save changes as patch files
 
 #### Collaboration

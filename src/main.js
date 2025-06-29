@@ -32,6 +32,10 @@ let filteredFileItems = [];
 let searchTimeout = null;
 let isSearching = false;
 
+// Blame view
+let currentViewMode = 'diff'; // 'diff' or 'blame'
+let currentBlameData = null;
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -348,7 +352,7 @@ async function selectFile(filePath) {
         }
     }
     
-    await loadFileDiff(filePath);
+    await loadFileView(filePath);
 }
 
 async function loadFileDiff(filePath) {
@@ -405,10 +409,137 @@ function displayFileDiff(diff) {
     `;
 }
 
+async function loadFileView(filePath) {
+    if (!currentRepoPath || !selectedCommit) return;
+    
+    // Update view toggle buttons state
+    updateViewToggleButtons();
+    
+    if (currentViewMode === 'diff') {
+        await loadFileDiff(filePath);
+    } else {
+        await loadFileBlame(filePath);
+    }
+}
+
+async function loadFileBlame(filePath) {
+    if (!currentRepoPath || !selectedCommit) return;
+    
+    try {
+        const blame = await invoke('get_file_blame', {
+            path: currentRepoPath,
+            commitId: selectedCommit,
+            filePath: filePath
+        });
+        currentBlameData = blame;
+        displayFileBlame(blame);
+    } catch (error) {
+        console.error('Error loading file blame:', error);
+        document.getElementById('file-diff').innerHTML = `<p style="padding: 15px; color: #dc3545;">Error: ${error}</p>`;
+    }
+}
+
+function displayFileBlame(blame) {
+    const diffDiv = document.getElementById('file-diff');
+    
+    if (blame.blame_lines.length === 0) {
+        diffDiv.innerHTML = `
+            <div class="diff-header">${blame.path} (blame)</div>
+            <p style="padding: 15px; color: #666; font-style: italic;">No content to display</p>
+        `;
+        return;
+    }
+    
+    const blameContent = blame.blame_lines.map(line => {
+        const commitMessage = line.commit_message.length > 30
+            ? line.commit_message.substring(0, 27) + '...'
+            : line.commit_message;
+            
+        return `
+            <div class="blame-line">
+                <div class="blame-info">
+                    <div class="blame-commit">
+                        <span class="blame-commit-hash" data-commit-id="${line.commit_id}">${line.commit_short_id}</span>
+                        <span class="blame-author">${escapeHtml(line.author)}</span>
+                    </div>
+                    <div class="blame-date">${line.date}</div>
+                    <div class="blame-message">${escapeHtml(commitMessage)}</div>
+                </div>
+                <div class="blame-line-number">${line.line_number}</div>
+                <div class="blame-content">${escapeHtml(line.content)}</div>
+            </div>
+        `;
+    }).join('');
+    
+    diffDiv.innerHTML = `
+        <div class="diff-header">${blame.path} (blame)</div>
+        ${blameContent}
+    `;
+    
+    // Add click listeners to blame commit hashes
+    diffDiv.querySelectorAll('.blame-commit-hash').forEach(hashElement => {
+        hashElement.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const commitId = hashElement.dataset.commitId;
+            copyCommitHashToClipboard(commitId, hashElement);
+        });
+    });
+}
+
+function updateViewToggleButtons() {
+    const diffBtn = document.getElementById('diff-view-btn');
+    const blameBtn = document.getElementById('blame-view-btn');
+    const panelTitle = document.getElementById('diff-panel-title');
+    
+    if (currentViewMode === 'diff') {
+        diffBtn.classList.add('active');
+        blameBtn.classList.remove('active');
+        panelTitle.textContent = 'File Diff';
+    } else {
+        diffBtn.classList.remove('active');
+        blameBtn.classList.add('active');
+        panelTitle.textContent = 'Blame View';
+    }
+    
+    // Disable blame button for files that can't be blamed
+    if (!selectedFile) {
+        blameBtn.disabled = true;
+    } else {
+        blameBtn.disabled = false;
+    }
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function initializeBlameView() {
+    const diffBtn = document.getElementById('diff-view-btn');
+    const blameBtn = document.getElementById('blame-view-btn');
+    
+    diffBtn.addEventListener('click', () => {
+        if (currentViewMode !== 'diff') {
+            currentViewMode = 'diff';
+            if (selectedFile) {
+                loadFileView(selectedFile);
+            }
+        }
+    });
+    
+    blameBtn.addEventListener('click', () => {
+        if (currentViewMode !== 'blame') {
+            currentViewMode = 'blame';
+            if (selectedFile) {
+                loadFileView(selectedFile);
+            }
+        }
+    });
+    
+    // Initialize view toggle state
+    updateViewToggleButtons();
 }
 
 function getRecentRepositories() {
@@ -1218,6 +1349,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize global search
     initializeGlobalSearch();
+    
+    // Initialize blame view
+    initializeBlameView();
     
     loadGitBranches();
 });

@@ -415,12 +415,105 @@
             background-color: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
             font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .panel-header-with-filter {
             padding: 10px 15px;
             background-color: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
             font-weight: bold;
+        }
+        .diff-view-controls {
+            display: flex;
+            gap: 4px;
+        }
+        .view-toggle-btn {
+            padding: 6px 12px;
+            border: 1px solid #007acc;
+            background-color: white;
+            color: #007acc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: normal;
+            transition: all 0.2s;
+        }
+        .view-toggle-btn:hover {
+            background-color: #f0f8ff;
+        }
+        .view-toggle-btn.active {
+            background-color: #007acc;
+            color: white;
+        }
+        .view-toggle-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .blame-line {
+            display: flex;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            border-bottom: 1px solid #f1f1f1;
+        }
+        .blame-info {
+            background-color: #f8f9fa;
+            padding: 4px 8px;
+            border-right: 1px solid #dee2e6;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 11px;
+        }
+        .blame-commit {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .blame-commit-hash {
+            font-family: monospace;
+            background-color: #e9ecef;
+            padding: 1px 4px;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .blame-commit-hash:hover {
+            background-color: #007acc;
+            color: white;
+        }
+        .blame-author {
+            color: #495057;
+            font-weight: 500;
+        }
+        .blame-date {
+            color: #6c757d;
+            font-size: 10px;
+        }
+        .blame-message {
+            color: #6c757d;
+            font-size: 10px;
+            font-style: italic;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .blame-line-number {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            padding: 4px 8px;
+            border-right: 1px solid #dee2e6;
+            min-width: 50px;
+            text-align: right;
+            font-size: 11px;
+        }
+        .blame-content {
+            padding: 4px 8px;
+            flex: 1;
+            white-space: pre;
+            overflow-x: auto;
         }
         .filter-input {
             width: 100%;
@@ -550,7 +643,13 @@
 
         <!-- File Diff Panel -->
         <div class="diff-panel">
-            <div class="panel-header">File Diff</div>
+            <div class="panel-header">
+                <span id="diff-panel-title">File Diff</span>
+                <div class="diff-view-controls">
+                    <button id="diff-view-btn" class="view-toggle-btn active" title="Show diff view">Diff</button>
+                    <button id="blame-view-btn" class="view-toggle-btn" title="Show blame view">Blame</button>
+                </div>
+            </div>
             <div id="file-diff">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a file to view changes</p>
             </div>
