@@ -44,6 +44,18 @@ pub struct DiffLine {
     new_line_number: Option<u32>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    result_type: String, // "commit", "file", "content"
+    commit_id: String,
+    commit_message: String,
+    commit_author: String,
+    commit_date: String,
+    file_path: Option<String>,
+    content_preview: Option<String>,
+    line_number: Option<u32>,
+}
+
 #[tauri::command]
 fn get_git_branches() -> Result<Vec<GitBranch>, String> {
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
@@ -315,11 +327,205 @@ fn open_repo_dialog(app: tauri::AppHandle) {
     let _ = app.emit("menu-open-repo", ());
 }
 
+#[tauri::command]
+fn global_search(path: String, query: String, branch_name: Option<String>) -> Result<Vec<SearchResult>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    let repo_path = Path::new(&path);
+    let repo = git2::Repository::open(repo_path).map_err(|e| format!("Failed to open repository: {}", e))?;
+    
+    let query_lower = query.to_lowercase();
+    
+    // Determine which branch to search (default to current branch if not specified)
+    let target_branch = if let Some(branch) = branch_name {
+        branch
+    } else {
+        // Get current branch
+        let head = repo.head().map_err(|e| format!("Failed to get HEAD: {}", e))?;
+        let branch_name = head.shorthand().unwrap_or("HEAD").to_string();
+        branch_name
+    };
+    
+    // Find the branch and get commits
+    let branch_result = repo.find_branch(&target_branch, git2::BranchType::Local);
+    let branch = match branch_result {
+        Ok(b) => b,
+        Err(_) => {
+            // If branch not found, try to resolve HEAD
+            let head = repo.head().map_err(|e| format!("Failed to get HEAD: {}", e))?;
+            let commit = head.peel_to_commit().map_err(|e| format!("Failed to get commit: {}", e))?;
+            
+            // Search in recent commits from HEAD
+            let mut revwalk = repo.revwalk().map_err(|e| format!("Failed to create revwalk: {}", e))?;
+            revwalk.push(commit.id()).map_err(|e| format!("Failed to push commit: {}", e))?;
+            revwalk.set_sorting(git2::Sort::TIME).map_err(|e| format!("Failed to set sorting: {}", e))?;
+            
+            return search_commits_and_content(&repo, revwalk, &query_lower);
+        }
+    };
+    
+    let commit = branch.get().peel_to_commit().map_err(|e| format!("Failed to get commit: {}", e))?;
+    let mut revwalk = repo.revwalk().map_err(|e| format!("Failed to create revwalk: {}", e))?;
+    revwalk.push(commit.id()).map_err(|e| format!("Failed to push commit: {}", e))?;
+    revwalk.set_sorting(git2::Sort::TIME).map_err(|e| format!("Failed to set sorting: {}", e))?;
+    
+    search_commits_and_content(&repo, revwalk, &query_lower)
+}
+
+fn search_commits_and_content(repo: &git2::Repository, mut revwalk: git2::Revwalk, query: &str) -> Result<Vec<SearchResult>, String> {
+    let mut results = Vec::new();
+    let mut count = 0;
+    const MAX_RESULTS: usize = 50;
+    const MAX_COMMITS: usize = 100;
+    
+    for oid in revwalk {
+        if count >= MAX_COMMITS || results.len() >= MAX_RESULTS {
+            break;
+        }
+        
+        let oid = oid.map_err(|e| format!("Failed to get OID: {}", e))?;
+        let commit = repo.find_commit(oid).map_err(|e| format!("Failed to find commit: {}", e))?;
+        
+        // Skip merge commits (commits with more than 1 parent)
+        if commit.parent_count() > 1 {
+            count += 1;
+            continue;
+        }
+        
+        let message = commit.message().unwrap_or("No message").to_string();
+        let author = commit.author();
+        let author_name = author.name().unwrap_or("Unknown").to_string();
+        let date = commit.time();
+        let date_str = format!("{}", chrono::DateTime::from_timestamp(date.seconds(), 0)
+            .unwrap_or_default()
+            .format("%Y-%m-%d %H:%M:%S"));
+        
+        // Search in commit message
+        if message.to_lowercase().contains(query) {
+            results.push(SearchResult {
+                result_type: "commit".to_string(),
+                commit_id: oid.to_string(),
+                commit_message: message.clone(),
+                commit_author: author_name.clone(),
+                commit_date: date_str.clone(),
+                file_path: None,
+                content_preview: Some(message.lines().next().unwrap_or(&message).to_string()),
+                line_number: None,
+            });
+        }
+        
+        // Search in file names and content
+        if let Err(_) = search_commit_files_and_content(repo, &commit, query, &mut results, &author_name, &date_str) {
+            // Continue even if individual commit search fails
+        }
+        
+        count += 1;
+        
+        if results.len() >= MAX_RESULTS {
+            break;
+        }
+    }
+    
+    Ok(results)
+}
+
+fn search_commit_files_and_content(
+    repo: &git2::Repository,
+    commit: &git2::Commit,
+    query: &str,
+    results: &mut Vec<SearchResult>,
+    author_name: &str,
+    date_str: &str,
+) -> Result<(), String> {
+    let tree = commit.tree().map_err(|e| format!("Failed to get tree: {}", e))?;
+    let parent_tree = if commit.parent_count() > 0 {
+        Some(commit.parent(0).map_err(|e| format!("Failed to get parent: {}", e))?.tree().map_err(|e| format!("Failed to get parent tree: {}", e))?)
+    } else {
+        None
+    };
+    
+    let mut diff_opts = git2::DiffOptions::new();
+    diff_opts.context_lines(2);
+    diff_opts.max_size(512 * 1024); // 512KB limit for content search
+    
+    let diff = repo.diff_tree_to_tree(
+        parent_tree.as_ref(),
+        Some(&tree),
+        Some(&mut diff_opts)
+    ).map_err(|e| format!("Failed to create diff: {}", e))?;
+    
+    for (delta_idx, delta) in diff.deltas().enumerate() {
+        if results.len() >= 50 { // Limit results
+            break;
+        }
+        
+        let file_path = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .and_then(|p| p.to_str())
+            .unwrap_or("unknown");
+        
+        // Search in file names
+        if file_path.to_lowercase().contains(query) {
+            results.push(SearchResult {
+                result_type: "file".to_string(),
+                commit_id: commit.id().to_string(),
+                commit_message: commit.message().unwrap_or("No message").lines().next().unwrap_or("").to_string(),
+                commit_author: author_name.to_string(),
+                commit_date: date_str.to_string(),
+                file_path: Some(file_path.to_string()),
+                content_preview: Some(format!("File: {}", file_path)),
+                line_number: None,
+            });
+        }
+        
+        // Search in file content (only for text files)
+        if !delta.new_file().is_binary() && !delta.old_file().is_binary() {
+            if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, delta_idx) {
+                for hunk_idx in 0..patch.num_hunks() {
+                    if let Ok((_, hunk_lines)) = patch.hunk(hunk_idx) {
+                        for line_idx in 0..hunk_lines {
+                            if let Ok(line) = patch.line_in_hunk(hunk_idx, line_idx) {
+                                let line_content = String::from_utf8_lossy(line.content());
+                                if line_content.to_lowercase().contains(query) {
+                                    let preview = line_content.trim_end_matches('\n').to_string();
+                                    let preview_truncated = if preview.len() > 100 {
+                                        format!("{}...", &preview[..97])
+                                    } else {
+                                        preview
+                                    };
+                                    
+                                    results.push(SearchResult {
+                                        result_type: "content".to_string(),
+                                        commit_id: commit.id().to_string(),
+                                        commit_message: commit.message().unwrap_or("No message").lines().next().unwrap_or("").to_string(),
+                                        commit_author: author_name.to_string(),
+                                        commit_date: date_str.to_string(),
+                                        file_path: Some(file_path.to_string()),
+                                        content_preview: Some(preview_truncated),
+                                        line_number: line.new_lineno().or(line.old_lineno()),
+                                    });
+                                    
+                                    // Limit content results per file
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog])
+    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -563,5 +769,273 @@ mod tests {
         assert_eq!(diff.status, "added");
         assert!(!diff.is_binary);
         assert!(!diff.diff_lines.is_empty());
+    }
+
+    #[test]
+    fn test_global_search_empty_query() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path().to_string_lossy().to_string();
+
+        let result = global_search(repo_path, "".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_global_search_commit_message() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path().to_string_lossy().to_string();
+
+        let result = global_search(repo_path, "Initial".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        // Should find the "Initial commit" message
+        assert!(!results.is_empty());
+        let commit_result = results.iter().find(|r| r.result_type == "commit");
+        assert!(commit_result.is_some());
+        
+        let commit_result = commit_result.unwrap();
+        assert!(commit_result.commit_message.to_lowercase().contains("initial"));
+        assert_eq!(commit_result.result_type, "commit");
+        assert!(commit_result.file_path.is_none());
+    }
+
+    #[test]
+    fn test_global_search_file_name() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path().to_string_lossy().to_string();
+
+        let result = global_search(repo_path, "README".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        // Should find the README.md file
+        assert!(!results.is_empty());
+        let file_result = results.iter().find(|r| r.result_type == "file");
+        assert!(file_result.is_some());
+        
+        let file_result = file_result.unwrap();
+        assert_eq!(file_result.result_type, "file");
+        assert!(file_result.file_path.is_some());
+        assert!(file_result.file_path.as_ref().unwrap().contains("README"));
+    }
+
+    #[test]
+    fn test_global_search_file_content() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path();
+
+        // Add a file with specific content
+        fs::write(repo_path.join("test.txt"), "This is a test file with specific content").expect("Failed to create test file");
+        Command::new("git")
+            .args(&["add", "test.txt"])
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to add test file");
+        Command::new("git")
+            .args(&["commit", "-m", "Add test file"])
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to commit test file");
+
+        let result = global_search(repo_path.to_string_lossy().to_string(), "specific".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        // Should find the content in the test file
+        assert!(!results.is_empty());
+        let content_result = results.iter().find(|r| r.result_type == "content");
+        assert!(content_result.is_some());
+        
+        let content_result = content_result.unwrap();
+        assert_eq!(content_result.result_type, "content");
+        assert!(content_result.file_path.is_some());
+        assert_eq!(content_result.file_path.as_ref().unwrap(), "test.txt");
+        assert!(content_result.content_preview.is_some());
+        assert!(content_result.content_preview.as_ref().unwrap().to_lowercase().contains("specific"));
+        assert!(content_result.line_number.is_some());
+    }
+
+    #[test]
+    fn test_global_search_case_insensitive() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path().to_string_lossy().to_string();
+
+        // Test case insensitive search for commit message
+        let result = global_search(repo_path.clone(), "INITIAL".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        assert!(!results.is_empty());
+        let commit_result = results.iter().find(|r| r.result_type == "commit");
+        assert!(commit_result.is_some());
+    }
+
+    #[test]
+    fn test_global_search_no_results() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path().to_string_lossy().to_string();
+
+        let result = global_search(repo_path, "nonexistentstring123".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_global_search_invalid_repository() {
+        let result = global_search("/invalid/path".to_string(), "test".to_string(), Some("main".to_string()));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_global_search_invalid_branch() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path().to_string_lossy().to_string();
+
+        // Should still work by falling back to HEAD
+        let result = global_search(repo_path, "Initial".to_string(), Some("nonexistent-branch".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_global_search_multiple_commits() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path();
+
+        // Add multiple commits with searchable content
+        for i in 1..=3 {
+            let filename = format!("file{}.txt", i);
+            let content = format!("Content for file {} with keyword searchable", i);
+            fs::write(repo_path.join(&filename), content).expect("Failed to create file");
+            
+            Command::new("git")
+                .args(&["add", &filename])
+                .current_dir(repo_path)
+                .output()
+                .expect("Failed to add file");
+            
+            Command::new("git")
+                .args(&["commit", "-m", &format!("Add {} with searchable content", filename)])
+                .current_dir(repo_path)
+                .output()
+                .expect("Failed to commit file");
+        }
+
+        let result = global_search(repo_path.to_string_lossy().to_string(), "searchable".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        // Should find results in commit messages and file content
+        assert!(results.len() >= 3); // At least 3 results from commits
+        
+        let commit_results: Vec<_> = results.iter().filter(|r| r.result_type == "commit").collect();
+        let content_results: Vec<_> = results.iter().filter(|r| r.result_type == "content").collect();
+        
+        assert!(commit_results.len() >= 3);
+        assert!(content_results.len() >= 3);
+    }
+
+    #[test]
+    fn test_global_search_result_limit() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path();
+
+        // Add many commits to test result limiting - use unique search term
+        for i in 1..=30 {
+            let filename = format!("limitfile{}.txt", i);
+            fs::write(repo_path.join(&filename), "uniquelimitsearch content").expect("Failed to create file");
+            
+            Command::new("git")
+                .args(&["add", &filename])
+                .current_dir(repo_path)
+                .output()
+                .expect("Failed to add file");
+            
+            Command::new("git")
+                .args(&["commit", "-m", "uniquelimitsearch commit"])
+                .current_dir(repo_path)
+                .output()
+                .expect("Failed to commit file");
+        }
+
+        let result = global_search(repo_path.to_string_lossy().to_string(), "uniquelimitsearch".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        // Should be limited to MAX_RESULTS (50) and stop early due to MAX_COMMITS (100)
+        assert!(results.len() <= 50);
+        assert!(results.len() > 10); // Should find many results
+        
+        // Verify we get both commit and content results
+        let commit_results: Vec<_> = results.iter().filter(|r| r.result_type == "commit").collect();
+        let content_results: Vec<_> = results.iter().filter(|r| r.result_type == "content").collect();
+        
+        assert!(!commit_results.is_empty());
+        assert!(!content_results.is_empty());
+    }
+
+    #[test]
+    fn test_global_search_filters_merge_commits() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path();
+
+        // Create a feature branch
+        Command::new("git")
+            .args(&["checkout", "-b", "feature"])
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Add a commit with searchable content on feature branch
+        fs::write(repo_path.join("feature.txt"), "mergetest content").expect("Failed to create feature file");
+        Command::new("git")
+            .args(&["add", "feature.txt"])
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to add feature file");
+        Command::new("git")
+            .args(&["commit", "-m", "mergetest feature commit"])
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to commit feature");
+
+        // Switch back to main and create a merge commit
+        Command::new("git")
+            .args(&["checkout", "main"])
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to switch to main");
+
+        Command::new("git")
+            .args(&["merge", "feature", "-m", "mergetest merge commit"])
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to merge feature branch");
+
+        let result = global_search(repo_path.to_string_lossy().to_string(), "mergetest".to_string(), Some("main".to_string()));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        // Should find results but exclude merge commits
+        assert!(!results.is_empty());
+        
+        let commit_results: Vec<_> = results.iter().filter(|r| r.result_type == "commit").collect();
+        
+        // Should find the feature commit but not the merge commit
+        // (The exact count depends on how git handles the merge, but we should find at least one commit)
+        assert!(!commit_results.is_empty());
+        
+        // Verify that we don't find any commit messages containing "merge commit"
+        let has_merge_commit = commit_results.iter().any(|r| r.commit_message.contains("merge commit"));
+        assert!(!has_merge_commit, "Should not find merge commit in results");
+        
+        // Should find the feature commit
+        let has_feature_commit = commit_results.iter().any(|r| r.commit_message.contains("feature commit"));
+        assert!(has_feature_commit, "Should find the feature commit in results");
     }
 }

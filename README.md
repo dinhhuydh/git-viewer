@@ -79,9 +79,9 @@ npm run tauri build
 ### 🔥 Must-Have Features (High Priority)
 
 #### Search & Filter
-- [ ] **Global Search** - Search across commits, files, and content
-- [ ] **File Name Filtering** - Filter files in changes panel
-- [ ] **Commit Message Search** - Find commits by message with regex support
+- [x] **Global Search** - Search across commits, files, and content (excludes merge commits)
+- [x] **File Name Filtering** - Filter files in changes panel
+- [x] **Search Result Navigation** - Click results to navigate to commits and files
 - [ ] **Author Filtering** - View commits by specific developers
 - [ ] **Date Range Filtering** - Filter commits by time period
 
@@ -102,10 +102,6 @@ npm run tauri build
 ### 🚀 Convenient Features (Medium Priority)
 
 #### Git Operations
-- [ ] **Checkout Branch/Commit** - Switch branches directly from UI
-- [ ] **Create New Branch** - Branch creation from any commit
-- [ ] **Cherry-Pick Commits** - Move commits between branches
-- [ ] **Revert Commits** - Undo changes with confirmation
 - [ ] **Stash Management** - View, apply, and drop stashes
 
 #### Code Intelligence
@@ -116,19 +112,10 @@ npm run tauri build
 - [ ] **Export Diff as Patch** - Save changes as patch files
 
 #### Collaboration
-- [ ] **Remote Branch Comparison** - Compare local vs origin
 - [ ] **Pull Request Integration** - GitHub/GitLab integration
-- [ ] **Conflict Resolution Helper** - Visual merge conflict resolution
 - [ ] **Tag Management** - View and manage Git tags
 
 ### ✨ Nice-to-Have Features (Low Priority)
-
-#### Visualization
-- [ ] **Commit Graph** - Visual branch relationships
-- [ ] **Code Churn Analysis** - Most frequently changed files
-- [ ] **Contributor Statistics** - Developer activity graphs
-- [ ] **File Size Evolution** - Track file size changes over time
-- [ ] **Dependency Graph** - Import/include relationships
 
 #### Developer Experience
 - [ ] **Multi-Repository Workspace** - Multiple repo tabs
@@ -156,7 +143,6 @@ npm run tauri build
 
 ### 🏆 Standout Features (Unique Value)
 - [ ] **AI-Powered Commit Summaries** - Generate human-readable summaries
-- [ ] **Smart Merge Conflict Resolution** - Visual 3-way merge tool
 - [ ] **Code Review Workflow** - Built-in review system
 - [ ] **Time-Travel Debugging** - Step through code changes over time
 - [ ] **Impact Analysis** - Show affected features/modules

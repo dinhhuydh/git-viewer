@@ -28,6 +28,10 @@ let commitItems = [];
 let allFileItems = [];
 let filteredFileItems = [];
 
+// Global search
+let searchTimeout = null;
+let isSearching = false;
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -109,6 +113,10 @@ async function loadCommits(branchName) {
 
 function displayCommits(commits) {
     const commitsDiv = document.getElementById('commits');
+    
+    // Clear any external commit indicator
+    removeExternalCommitIndicator();
+    
     if (commits.length === 0) {
         commitsDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No commits found</p>';
         commitItems = [];
@@ -151,7 +159,9 @@ async function selectCommit(commitId) {
     document.querySelectorAll('.commit-item').forEach(item => {
         item.classList.remove('selected');
     });
+    
     const selectedElement = document.querySelector(`[data-commit-id="${commitId}"]`);
+    
     if (selectedElement) {
         selectedElement.classList.add('selected');
         
@@ -160,9 +170,85 @@ async function selectCommit(commitId) {
         if (index !== -1) {
             currentCommitIndex = index;
         }
+        
+        // Scroll the selected commit into view
+        selectedElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'nearest',
+            inline: 'nearest'
+        });
+        
+        // Remove any "external commit" indicator
+        removeExternalCommitIndicator();
+    } else {
+        // Commit not in current view - show indicator
+        showExternalCommitIndicator(commitId);
+        // Reset navigation index since commit isn't in current list
+        currentCommitIndex = -1;
     }
     
+    // Update the file panel header to show current commit
+    updateFilePanelHeader(commitId);
+    
     await loadFileChanges(commitId);
+}
+
+function updateFilePanelHeader(commitId) {
+    const header = document.querySelector('.panel-header-with-filter');
+    if (header) {
+        const shortId = commitId.substring(0, 8);
+        header.innerHTML = `
+            File Changes <small style="color: #666;">(${shortId})</small>
+            <input type="text" class="filter-input" id="file-filter" placeholder="Filter files..." />
+        `;
+        
+        // Reinitialize file filtering since we replaced the input
+        const filterInput = document.getElementById('file-filter');
+        filterInput.addEventListener('input', (e) => {
+            filterFiles(e.target.value);
+        });
+        filterInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                filterInput.value = '';
+                filterFiles('');
+                filterInput.blur();
+            }
+        });
+    }
+}
+
+function showExternalCommitIndicator(commitId) {
+    const commitsDiv = document.getElementById('commits');
+    
+    // Remove existing indicator if any
+    removeExternalCommitIndicator();
+    
+    // Create indicator element
+    const indicator = document.createElement('div');
+    indicator.id = 'external-commit-indicator';
+    indicator.style.cssText = `
+        background-color: #d1ecf1;
+        border: 2px solid #007acc;
+        color: #0c5460;
+        padding: 12px 15px;
+        margin: 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        text-align: center;
+        font-weight: bold;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    `;
+    indicator.innerHTML = `📍 Viewing commit ${commitId.substring(0, 8)} (not in current list)`;
+    
+    // Insert at the top of commits div
+    commitsDiv.insertBefore(indicator, commitsDiv.firstChild);
+}
+
+function removeExternalCommitIndicator() {
+    const indicator = document.getElementById('external-commit-indicator');
+    if (indicator) {
+        indicator.remove();
+    }
 }
 
 async function loadFileChanges(commitId) {
@@ -710,6 +796,204 @@ function initializeFileKeyboardNavigation() {
     });
 }
 
+async function performGlobalSearch(query) {
+    if (!currentRepoPath || query.trim().length < 2) {
+        hideSearchResults();
+        return;
+    }
+    
+    isSearching = true;
+    const searchOverlay = document.getElementById('search-results-overlay');
+    
+    try {
+        const results = await invoke('global_search', {
+            path: currentRepoPath,
+            query: query.trim(),
+            branchName: currentBranch
+        });
+        
+        displaySearchResults(results, query);
+    } catch (error) {
+        console.error('Search error:', error);
+        searchOverlay.innerHTML = '<div class="search-result-item"><div class="search-result-content">Search failed: ' + error + '</div></div>';
+        searchOverlay.classList.add('show');
+    } finally {
+        isSearching = false;
+    }
+}
+
+function displaySearchResults(results, query) {
+    const searchOverlay = document.getElementById('search-results-overlay');
+    
+    if (results.length === 0) {
+        searchOverlay.innerHTML = '<div class="search-result-item"><div class="search-result-content">No results found</div></div>';
+        searchOverlay.classList.add('show');
+        return;
+    }
+    
+    const resultsHtml = results.map(result => {
+        const typeLabel = {
+            'commit': 'Commit Message',
+            'file': 'File Name', 
+            'content': 'File Content'
+        }[result.result_type] || result.result_type;
+        
+        const title = result.result_type === 'commit' 
+            ? result.commit_message
+            : result.file_path || result.commit_message;
+            
+        const content = result.content_preview || '';
+        const highlightedContent = highlightSearchTerm(content, query);
+        const highlightedTitle = highlightSearchTerm(title, query);
+        
+        let lineInfo = '';
+        if (result.line_number) {
+            lineInfo = ` (line ${result.line_number})`;
+        }
+        
+        // Build commit info for file and content results
+        let commitInfo = '';
+        if (result.result_type === 'file' || result.result_type === 'content') {
+            const shortCommitId = result.commit_id.substring(0, 8);
+            const commitMessage = result.commit_message.length > 50 
+                ? result.commit_message.substring(0, 47) + '...'
+                : result.commit_message;
+            commitInfo = `<div class="search-result-commit-info">
+                <span class="search-result-commit-hash">${shortCommitId}</span>${highlightSearchTerm(commitMessage, query)}
+            </div>`;
+        }
+        
+        return `
+            <div class="search-result-item" data-commit-id="${result.commit_id}" data-file-path="${result.file_path || ''}" data-result-type="${result.result_type}">
+                <div class="search-result-type">${typeLabel}${lineInfo}</div>
+                <div class="search-result-title">${highlightedTitle}</div>
+                <div class="search-result-content">
+                    ${highlightedContent}
+                    <br><small>${result.commit_author} • ${result.commit_date}</small>
+                    ${commitInfo}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    searchOverlay.innerHTML = resultsHtml;
+    searchOverlay.classList.add('show');
+    
+    // Add click listeners to search results
+    searchOverlay.querySelectorAll('.search-result-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const commitId = item.dataset.commitId;
+            const filePath = item.dataset.filePath;
+            const resultType = item.dataset.resultType;
+            
+            handleSearchResultClick(commitId, filePath, resultType);
+            hideSearchResults();
+        });
+    });
+}
+
+function highlightSearchTerm(text, query) {
+    if (!text || !query) return text;
+    
+    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+    return text.replace(regex, '<span class="search-highlight">$1</span>');
+}
+
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function handleSearchResultClick(commitId, filePath, resultType) {
+    // Navigate to the commit (this handles all the UI updates)
+    if (commitId) {
+        await selectCommit(commitId);
+        
+        // If there's a specific file, select it after file changes load
+        if (filePath && resultType !== 'commit') {
+            // Wait a bit longer for file changes to load and DOM to update
+            setTimeout(() => {
+                const fileElement = document.querySelector(`[data-file-path="${filePath}"]`);
+                if (fileElement) {
+                    // Clear any existing selections first
+                    document.querySelectorAll('.file-item').forEach(item => {
+                        item.classList.remove('selected');
+                    });
+                    
+                    // Select the specific file
+                    fileElement.classList.add('selected');
+                    const fileIndex = filteredFileItems.indexOf(fileElement);
+                    if (fileIndex !== -1) {
+                        currentFileIndex = fileIndex;
+                    }
+                    
+                    // Scroll into view
+                    fileElement.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'nearest',
+                        inline: 'nearest'
+                    });
+                    
+                    selectFile(filePath);
+                }
+            }, 200); // Increased timeout to ensure DOM is updated
+        }
+    }
+}
+
+function hideSearchResults() {
+    const searchOverlay = document.getElementById('search-results-overlay');
+    searchOverlay.classList.remove('show');
+}
+
+function initializeGlobalSearch() {
+    const searchInput = document.getElementById('global-search');
+    const searchOverlay = document.getElementById('search-results-overlay');
+    
+    // Real-time search with debouncing
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value;
+        
+        // Clear previous timeout
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        if (query.trim().length < 2) {
+            hideSearchResults();
+            return;
+        }
+        
+        // Debounce search to avoid too many requests
+        searchTimeout = setTimeout(() => {
+            performGlobalSearch(query);
+        }, 300);
+    });
+    
+    // Clear search on Escape
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            searchInput.value = '';
+            hideSearchResults();
+            searchInput.blur();
+        }
+    });
+    
+    // Hide results when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !searchOverlay.contains(e.target)) {
+            hideSearchResults();
+        }
+    });
+    
+    // Global keyboard shortcut (Ctrl+K or Cmd+K)
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            searchInput.focus();
+        }
+    });
+}
+
 function initializePanelResizing() {
     // Initialize file panel resizing
     initializeFilePanelResizing();
@@ -868,6 +1152,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize file filtering
     initializeFileFiltering();
+    
+    // Initialize global search
+    initializeGlobalSearch();
     
     loadGitBranches();
 });
