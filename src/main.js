@@ -20,6 +20,136 @@ const DEFAULT_SEARCH_LIMIT = 100;
 const blameCache = new Map();
 const MAX_CACHE_SIZE = 50; // Maximum number of blame results to cache
 
+// Language detection for syntax highlighting
+function getLanguageFromFileName(fileName) {
+    const extension = fileName.split('.').pop().toLowerCase();
+    const languageMap = {
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'py': 'python',
+        'java': 'java',
+        'rs': 'rust',
+        'go': 'go',
+        'cpp': 'cpp',
+        'cc': 'cpp',
+        'cxx': 'cpp',
+        'c': 'c',
+        'h': 'c',
+        'hpp': 'cpp',
+        'css': 'css',
+        'scss': 'css',
+        'sass': 'css',
+        'html': 'html',
+        'htm': 'html',
+        'xml': 'html',
+        'json': 'json',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'md': 'markdown',
+        'markdown': 'markdown',
+        'sh': 'bash',
+        'bash': 'bash',
+        'zsh': 'bash',
+        'sql': 'sql',
+        'php': 'php',
+        'rb': 'ruby',
+        'ex': 'elixir',
+        'exs': 'elixir',
+        'heex': 'html', // HEEx templates use HTML-like syntax
+        'elm': 'elm',
+        'swift': 'swift',
+        'kt': 'kotlin',
+        'scala': 'scala',
+        'clj': 'clojure',
+        'r': 'r',
+        'dockerfile': 'docker',
+        'toml': 'toml',
+        'ini': 'ini',
+        'cfg': 'ini',
+        'conf': 'ini'
+    };
+    return languageMap[extension] || 'text';
+}
+
+function highlightCode(code, language) {
+    if (!code || !window.Prism) return escapeHtml(code);
+    
+    try {
+        if (language === 'text' || !Prism.languages[language]) {
+            return escapeHtml(code);
+        }
+        
+        const highlighted = Prism.highlight(code, Prism.languages[language], language);
+        return highlighted;
+    } catch (error) {
+        console.warn('Syntax highlighting failed:', error);
+        return escapeHtml(code);
+    }
+}
+
+function getFileTypeIcon(fileName) {
+    const extension = fileName.split('.').pop().toLowerCase();
+    const iconMap = {
+        // Web Development
+        'js': '📄', 'jsx': '⚛️', 'ts': '🔷', 'tsx': '⚛️',
+        'html': '🌐', 'htm': '🌐', 'css': '🎨', 'scss': '🎨', 'sass': '🎨',
+        'json': '📋', 'xml': '📄',
+        
+        // Programming Languages
+        'py': '🐍', 'java': '☕', 'rs': '🦀', 'go': '🐹',
+        'cpp': '⚙️', 'cc': '⚙️', 'cxx': '⚙️', 'c': '⚙️', 'h': '⚙️', 'hpp': '⚙️',
+        'php': '🐘', 'rb': '💎', 'swift': '🐦', 'kt': '🟣', 'scala': '🔴',
+        'ex': '⚗️', 'exs': '⚗️', 'heex': '🧪', 'elm': '🌳',
+        
+        // Data & Config
+        'yaml': '📝', 'yml': '📝', 'toml': '📝', 'ini': '📝', 'cfg': '📝', 'conf': '📝',
+        'sql': '🗃️', 'db': '🗃️',
+        
+        // Documentation
+        'md': '📖', 'markdown': '📖', 'txt': '📄', 'readme': '📖',
+        
+        // Scripts
+        'sh': '🖥️', 'bash': '🖥️', 'zsh': '🖥️', 'ps1': '🖥️',
+        'dockerfile': '🐳', 'docker': '🐳',
+        
+        // Images
+        'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️', 'svg': '🖼️',
+        'ico': '🖼️', 'webp': '🖼️',
+        
+        // Other
+        'pdf': '📕', 'zip': '📦', 'tar': '📦', 'gz': '📦',
+        'lock': '🔒', 'env': '🔧', 'gitignore': '🚫', 'license': '📜'
+    };
+    
+    // Check for special file names
+    const lowerName = fileName.toLowerCase();
+    if (lowerName === 'dockerfile' || lowerName === 'docker-compose.yml' || lowerName === 'docker-compose.yaml') {
+        return '🐳';
+    }
+    if (lowerName === 'package.json' || lowerName === 'package-lock.json') {
+        return '📦';
+    }
+    if (lowerName === 'cargo.toml' || lowerName === 'cargo.lock') {
+        return '🦀';
+    }
+    if (lowerName === 'gemfile' || lowerName === 'gemfile.lock') {
+        return '💎';
+    }
+    if (lowerName === 'requirements.txt' || lowerName === 'setup.py') {
+        return '🐍';
+    }
+    if (lowerName === 'makefile' || lowerName === 'cmake') {
+        return '⚙️';
+    }
+    if (lowerName.startsWith('.git')) {
+        return '🔧';
+    }
+    
+    return iconMap[extension] || '📄';
+}
+
 // Panel resizing
 const FILE_PANEL_WIDTH_KEY = 'git-viewer-file-panel-width';
 const COMMITS_SIDEBAR_WIDTH_KEY = 'git-viewer-commits-sidebar-width';
@@ -313,12 +443,14 @@ function displayFileChanges(changes) {
         return;
     }
     
-    const changesList = changes.map(change => 
-        `<div class="file-item" data-file-path="${change.path}">
+    const changesList = changes.map(change => {
+        const icon = getFileTypeIcon(change.path);
+        return `<div class="file-item" data-file-path="${change.path}">
             <span class="file-status ${change.status}"></span>
+            <span class="file-icon">${icon}</span>
             <span class="file-path">${change.path}</span>
-        </div>`
-    ).join('');
+        </div>`;
+    }).join('');
     
     changesDiv.innerHTML = changesList;
     
@@ -406,15 +538,21 @@ function displayFileDiff(diff) {
         return;
     }
     
+    // Get language for syntax highlighting
+    const language = getLanguageFromFileName(diff.path);
+    
     const diffContent = diff.diff_lines.map(line => {
         const oldLineNum = line.old_line_number ? line.old_line_number.toString() : '';
         const newLineNum = line.new_line_number ? line.new_line_number.toString() : '';
         const lineNumbers = `${oldLineNum} ${newLineNum}`.trim() || ' ';
         
+        // Apply syntax highlighting to line content
+        const highlightedContent = highlightCode(line.content, language);
+        
         return `
             <div class="diff-line ${line.line_type}">
                 <div class="line-numbers">${lineNumbers}</div>
-                <div class="line-content">${escapeHtml(line.content)}</div>
+                <div class="line-content">${highlightedContent}</div>
             </div>
         `;
     }).join('');
@@ -510,6 +648,9 @@ function displayFileBlame(blame) {
     header.textContent = `${blame.path} (blame)`;
     fragment.appendChild(header);
     
+    // Get language for syntax highlighting
+    const language = getLanguageFromFileName(blame.path);
+    
     // Create blame lines efficiently
     blame.blame_lines.forEach(line => {
         const lineDiv = document.createElement('div');
@@ -551,10 +692,10 @@ function displayFileBlame(blame) {
         lineNumber.className = 'blame-line-number';
         lineNumber.textContent = line.line_number;
         
-        // Create content
+        // Create content with syntax highlighting
         const content = document.createElement('div');
         content.className = 'blame-content';
-        content.textContent = line.content;
+        content.innerHTML = highlightCode(line.content, language);
         
         lineDiv.appendChild(blameInfo);
         lineDiv.appendChild(lineNumber);

@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Git Viewer</title>
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-html.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-ruby.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-elixir.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-elm.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -480,6 +501,7 @@
             align-items: center;
             cursor: pointer;
             transition: background-color 0.2s;
+            gap: 8px;
         }
         .file-item:hover {
             background-color: #f8f9fa;
@@ -493,7 +515,12 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            margin-right: 10px;
+            margin-right: 2px;
+        }
+        .file-icon {
+            font-size: 14px;
+            margin-right: 4px;
+            flex-shrink: 0;
         }
         .file-status.added { background-color: #28a745; }
         .file-status.modified { background-color: #ffc107; }
@@ -619,6 +646,32 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        /* Syntax highlighting improvements */
+        .line-content code,
+        .blame-content code {
+            background: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            font-family: inherit !important;
+            font-size: inherit !important;
+            line-height: inherit !important;
+        }
+        .line-content .token,
+        .blame-content .token {
+            background: none !important;
+        }
+        /* Override Prism.js theme for better diff colors */
+        .diff-line.addition .token.comment,
+        .diff-line.addition .token.string,
+        .diff-line.addition .token.keyword {
+            color: inherit !important;
+        }
+        .diff-line.deletion .token.comment,
+        .diff-line.deletion .token.string,
+        .diff-line.deletion .token.keyword {
+            color: inherit !important;
         }
         .filter-input {
             width: 100%;
