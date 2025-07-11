@@ -15,6 +15,10 @@ const MAX_RECENT_REPOS = 10;
 const SEARCH_LIMIT_KEY = 'git-viewer-search-limit';
 const DEFAULT_SEARCH_LIMIT = 100;
 
+// Blame cache
+const blameCache = new Map();
+const MAX_CACHE_SIZE = 50; // Maximum number of blame results to cache
+
 // Panel resizing
 const FILE_PANEL_WIDTH_KEY = 'git-viewer-file-panel-width';
 const COMMITS_SIDEBAR_WIDTH_KEY = 'git-viewer-commits-sidebar-width';
@@ -429,18 +433,53 @@ async function loadFileView(filePath) {
 async function loadFileBlame(filePath) {
     if (!currentRepoPath || !selectedCommit) return;
     
+    const diffDiv = document.getElementById('file-diff');
+    
+    // Check cache first
+    const cacheKey = `${currentRepoPath}:${selectedCommit}:${filePath}`;
+    if (blameCache.has(cacheKey)) {
+        const cachedBlame = blameCache.get(cacheKey);
+        currentBlameData = cachedBlame;
+        displayFileBlame(cachedBlame);
+        return;
+    }
+    
+    // Show loading indicator
+    diffDiv.innerHTML = `
+        <div class="diff-header">Loading blame for ${filePath}...</div>
+        <div style="padding: 20px; text-align: center;">
+            <div class="loading-spinner"></div>
+            <p style="margin-top: 10px; color: #666;">Analyzing file history...</p>
+        </div>
+    `;
+    
     try {
         const blame = await invoke('get_file_blame', {
             path: currentRepoPath,
             commitId: selectedCommit,
             filePath: filePath
         });
+        
+        // Cache the result
+        cacheBlameResult(cacheKey, blame);
+        
         currentBlameData = blame;
         displayFileBlame(blame);
     } catch (error) {
         console.error('Error loading file blame:', error);
-        document.getElementById('file-diff').innerHTML = `<p style="padding: 15px; color: #dc3545;">Error: ${error}</p>`;
+        diffDiv.innerHTML = `<p style="padding: 15px; color: #dc3545;">Error: ${error}</p>`;
     }
+}
+
+function cacheBlameResult(cacheKey, blame) {
+    // Remove oldest entries if cache is full
+    if (blameCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = blameCache.keys().next().value;
+        blameCache.delete(firstKey);
+    }
+    
+    // Add new entry
+    blameCache.set(cacheKey, blame);
 }
 
 function displayFileBlame(blame) {
@@ -454,41 +493,71 @@ function displayFileBlame(blame) {
         return;
     }
     
-    const blameContent = blame.blame_lines.map(line => {
-        const commitMessage = line.commit_message.length > 30
-            ? line.commit_message.substring(0, 27) + '...'
-            : line.commit_message;
-            
-        return `
-            <div class="blame-line">
-                <div class="blame-info">
-                    <div class="blame-commit">
-                        <span class="blame-commit-hash" data-commit-id="${line.commit_id}">${line.commit_short_id}</span>
-                        <span class="blame-author">${escapeHtml(line.author)}</span>
-                    </div>
-                    <div class="blame-date">${line.date}</div>
-                    <div class="blame-message">${escapeHtml(commitMessage)}</div>
-                </div>
-                <div class="blame-line-number">${line.line_number}</div>
-                <div class="blame-content">${escapeHtml(line.content)}</div>
-            </div>
-        `;
-    }).join('');
+    // Use DocumentFragment for better performance
+    const fragment = document.createDocumentFragment();
     
-    diffDiv.innerHTML = `
-        <div class="diff-header">${blame.path} (blame)</div>
-        ${blameContent}
-    `;
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'diff-header';
+    header.textContent = `${blame.path} (blame)`;
+    fragment.appendChild(header);
     
-    // Add click listeners to blame commit hashes
-    diffDiv.querySelectorAll('.blame-commit-hash').forEach(hashElement => {
-        hashElement.addEventListener('click', (e) => {
+    // Create blame lines efficiently
+    blame.blame_lines.forEach(line => {
+        const lineDiv = document.createElement('div');
+        lineDiv.className = 'blame-line';
+        
+        // Create blame info
+        const blameInfo = document.createElement('div');
+        blameInfo.className = 'blame-info';
+        
+        const blameCommit = document.createElement('div');
+        blameCommit.className = 'blame-commit';
+        
+        const commitHash = document.createElement('span');
+        commitHash.className = 'blame-commit-hash';
+        commitHash.dataset.commitId = line.commit_id;
+        commitHash.textContent = line.commit_short_id;
+        commitHash.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            const commitId = hashElement.dataset.commitId;
-            copyCommitHashToClipboard(commitId, hashElement);
+            copyCommitHashToClipboard(line.commit_id, commitHash);
         });
+        
+        const author = document.createElement('span');
+        author.className = 'blame-author';
+        author.textContent = line.author;
+        
+        const blameDate = document.createElement('span');
+        blameDate.className = 'blame-date';
+        blameDate.textContent = line.date;
+        
+        blameCommit.appendChild(commitHash);
+        blameCommit.appendChild(author);
+        blameCommit.appendChild(blameDate);
+        
+        blameInfo.appendChild(blameCommit);
+        
+        // Create line number
+        const lineNumber = document.createElement('div');
+        lineNumber.className = 'blame-line-number';
+        lineNumber.textContent = line.line_number;
+        
+        // Create content
+        const content = document.createElement('div');
+        content.className = 'blame-content';
+        content.textContent = line.content;
+        
+        lineDiv.appendChild(blameInfo);
+        lineDiv.appendChild(lineNumber);
+        lineDiv.appendChild(content);
+        
+        fragment.appendChild(lineDiv);
     });
+    
+    // Replace content efficiently
+    diffDiv.innerHTML = '';
+    diffDiv.appendChild(fragment);
 }
 
 function updateViewToggleButtons() {

@@ -563,6 +563,22 @@ fn get_file_blame(path: String, commit_id: String, file_path: String) -> Result<
         return Err("Cannot show blame for binary files".to_string());
     }
     
+    // Check file size limits for performance
+    const MAX_BLAME_SIZE: usize = 1024 * 1024; // 1MB
+    const MAX_BLAME_LINES: usize = 3000; // 3000 lines
+    
+    if blob.size() > MAX_BLAME_SIZE {
+        return Err(format!("File too large for blame view ({}KB > 1MB)", blob.size() / 1024));
+    }
+    
+    // Get file content to check line count
+    let content = String::from_utf8(blob.content().to_vec()).map_err(|e| format!("File is not valid UTF-8: {}", e))?;
+    let line_count = content.lines().count();
+    
+    if line_count > MAX_BLAME_LINES {
+        return Err(format!("File has too many lines for blame view ({} > {})", line_count, MAX_BLAME_LINES));
+    }
+    
     // Create blame options
     let mut blame_options = git2::BlameOptions::new();
     blame_options.track_copies_same_commit_moves(true);
@@ -570,9 +586,6 @@ fn get_file_blame(path: String, commit_id: String, file_path: String) -> Result<
     
     // Get blame for the file
     let blame = repo.blame_file(Path::new(&file_path), Some(&mut blame_options)).map_err(|e| e.to_string())?;
-    
-    // Get file content
-    let content = String::from_utf8(blob.content().to_vec()).map_err(|e| format!("File is not valid UTF-8: {}", e))?;
     
     let mut blame_lines = Vec::new();
     
