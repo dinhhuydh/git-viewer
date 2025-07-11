@@ -9,10 +9,12 @@ A modern, fast, and intuitive Git repository viewer built with Tauri (Rust + Jav
 ### 🎯 Core Functionality
 - **Repository Browser** - Open and browse any Git repository
 - **Branch Management** - Easy branch selection with dropdown interface
+- **Remote Repository Support** - View and switch between Git remotes
 - **Commit History** - View detailed commit history with metadata
-- **File Changes** - See all files modified in each commit
+- **File Changes** - See all files modified in each commit with file type icons
 - **Syntax-Highlighted Diffs** - Beautiful code diffs with language-specific highlighting
-- **Recent Repositories** - Quick access to recently opened repositories
+- **Git Blame View** - See who changed each line with syntax highlighting
+- **Recent Repositories** - Quick access to recently opened repositories with auto-restore
 
 ### ⌨️ Keyboard Navigation
 - **Arrow Key Navigation** - Navigate commits and files using arrow keys
