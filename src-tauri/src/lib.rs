@@ -345,7 +345,7 @@ fn open_repo_dialog(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn global_search(path: String, query: String, branch_name: Option<String>) -> Result<Vec<SearchResult>, String> {
+fn global_search(path: String, query: String, branch_name: Option<String>, max_commits: Option<u32>) -> Result<Vec<SearchResult>, String> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -379,7 +379,7 @@ fn global_search(path: String, query: String, branch_name: Option<String>) -> Re
             revwalk.push(commit.id()).map_err(|e| format!("Failed to push commit: {}", e))?;
             revwalk.set_sorting(git2::Sort::TIME).map_err(|e| format!("Failed to set sorting: {}", e))?;
             
-            return search_commits_and_content(&repo, revwalk, &query_lower);
+            return search_commits_and_content(&repo, revwalk, &query_lower, max_commits);
         }
     };
     
@@ -388,17 +388,17 @@ fn global_search(path: String, query: String, branch_name: Option<String>) -> Re
     revwalk.push(commit.id()).map_err(|e| format!("Failed to push commit: {}", e))?;
     revwalk.set_sorting(git2::Sort::TIME).map_err(|e| format!("Failed to set sorting: {}", e))?;
     
-    search_commits_and_content(&repo, revwalk, &query_lower)
+    search_commits_and_content(&repo, revwalk, &query_lower, max_commits)
 }
 
-fn search_commits_and_content(repo: &git2::Repository, mut revwalk: git2::Revwalk, query: &str) -> Result<Vec<SearchResult>, String> {
+fn search_commits_and_content(repo: &git2::Repository, mut revwalk: git2::Revwalk, query: &str, max_commits: Option<u32>) -> Result<Vec<SearchResult>, String> {
     let mut results = Vec::new();
     let mut count = 0;
     const MAX_RESULTS: usize = 50;
-    const MAX_COMMITS: usize = 100;
+    let max_commits_limit = max_commits.unwrap_or(100) as usize;
     
     for oid in revwalk {
-        if count >= MAX_COMMITS || results.len() >= MAX_RESULTS {
+        if count >= max_commits_limit || results.len() >= MAX_RESULTS {
             break;
         }
         
@@ -886,7 +886,7 @@ mod tests {
         let temp_repo = create_test_git_repo();
         let repo_path = temp_repo.path().to_string_lossy().to_string();
 
-        let result = global_search(repo_path, "".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path, "".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         assert_eq!(results.len(), 0);
@@ -897,7 +897,7 @@ mod tests {
         let temp_repo = create_test_git_repo();
         let repo_path = temp_repo.path().to_string_lossy().to_string();
 
-        let result = global_search(repo_path, "Initial".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path, "Initial".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         
@@ -917,7 +917,7 @@ mod tests {
         let temp_repo = create_test_git_repo();
         let repo_path = temp_repo.path().to_string_lossy().to_string();
 
-        let result = global_search(repo_path, "README".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path, "README".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         
@@ -950,7 +950,7 @@ mod tests {
             .output()
             .expect("Failed to commit test file");
 
-        let result = global_search(repo_path.to_string_lossy().to_string(), "specific".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path.to_string_lossy().to_string(), "specific".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         
@@ -974,7 +974,7 @@ mod tests {
         let repo_path = temp_repo.path().to_string_lossy().to_string();
 
         // Test case insensitive search for commit message
-        let result = global_search(repo_path.clone(), "INITIAL".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path.clone(), "INITIAL".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         
@@ -988,7 +988,7 @@ mod tests {
         let temp_repo = create_test_git_repo();
         let repo_path = temp_repo.path().to_string_lossy().to_string();
 
-        let result = global_search(repo_path, "nonexistentstring123".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path, "nonexistentstring123".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         assert_eq!(results.len(), 0);
@@ -996,7 +996,7 @@ mod tests {
 
     #[test]
     fn test_global_search_invalid_repository() {
-        let result = global_search("/invalid/path".to_string(), "test".to_string(), Some("main".to_string()));
+        let result = global_search("/invalid/path".to_string(), "test".to_string(), Some("main".to_string()), None);
         assert!(result.is_err());
     }
 
@@ -1006,7 +1006,7 @@ mod tests {
         let repo_path = temp_repo.path().to_string_lossy().to_string();
 
         // Should still work by falling back to HEAD
-        let result = global_search(repo_path, "Initial".to_string(), Some("nonexistent-branch".to_string()));
+        let result = global_search(repo_path, "Initial".to_string(), Some("nonexistent-branch".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         assert!(!results.is_empty());
@@ -1036,7 +1036,7 @@ mod tests {
                 .expect("Failed to commit file");
         }
 
-        let result = global_search(repo_path.to_string_lossy().to_string(), "searchable".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path.to_string_lossy().to_string(), "searchable".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         
@@ -1073,7 +1073,7 @@ mod tests {
                 .expect("Failed to commit file");
         }
 
-        let result = global_search(repo_path.to_string_lossy().to_string(), "uniquelimitsearch".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path.to_string_lossy().to_string(), "uniquelimitsearch".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         
@@ -1127,7 +1127,7 @@ mod tests {
             .output()
             .expect("Failed to merge feature branch");
 
-        let result = global_search(repo_path.to_string_lossy().to_string(), "mergetest".to_string(), Some("main".to_string()));
+        let result = global_search(repo_path.to_string_lossy().to_string(), "mergetest".to_string(), Some("main".to_string()), None);
         assert!(result.is_ok());
         let results = result.unwrap();
         
@@ -1147,5 +1147,43 @@ mod tests {
         // Should find the feature commit
         let has_feature_commit = commit_results.iter().any(|r| r.commit_message.contains("feature commit"));
         assert!(has_feature_commit, "Should find the feature commit in results");
+    }
+
+    #[test]
+    fn test_global_search_custom_limit() {
+        let temp_repo = create_test_git_repo();
+        let repo_path = temp_repo.path();
+
+        // Add 5 commits with searchable content
+        for i in 1..=5 {
+            let filename = format!("limitfile{}.txt", i);
+            fs::write(repo_path.join(&filename), "customlimit content").expect("Failed to create file");
+            Command::new("git")
+                .args(&["add", &filename])
+                .current_dir(repo_path)
+                .output()
+                .expect("Failed to add file");
+            Command::new("git")
+                .args(&["commit", "-m", "customlimit commit"])
+                .current_dir(repo_path)
+                .output()
+                .expect("Failed to commit file");
+        }
+
+        // Test with limit of 3 commits
+        let result = global_search(repo_path.to_string_lossy().to_string(), "customlimit".to_string(), Some("main".to_string()), Some(3));
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        
+        // Should find some results but limited by the commit count
+        assert!(!results.is_empty());
+        
+        // Test with unlimited (None should use default 100)
+        let result_unlimited = global_search(repo_path.to_string_lossy().to_string(), "customlimit".to_string(), Some("main".to_string()), None);
+        assert!(result_unlimited.is_ok());
+        let results_unlimited = result_unlimited.unwrap();
+        
+        // Should find all results since we're within the default limit
+        assert!(!results_unlimited.is_empty());
     }
 }

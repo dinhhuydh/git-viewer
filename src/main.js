@@ -11,6 +11,10 @@ let selectedFile = null;
 const RECENT_REPOS_KEY = 'git-viewer-recent-repos';
 const MAX_RECENT_REPOS = 10;
 
+// Search settings
+const SEARCH_LIMIT_KEY = 'git-viewer-search-limit';
+const DEFAULT_SEARCH_LIMIT = 100;
+
 // Panel resizing
 const FILE_PANEL_WIDTH_KEY = 'git-viewer-file-panel-width';
 const COMMITS_SIDEBAR_WIDTH_KEY = 'git-viewer-commits-sidebar-width';
@@ -516,6 +520,53 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getSearchLimit() {
+    try {
+        const stored = localStorage.getItem(SEARCH_LIMIT_KEY);
+        if (stored) {
+            const limit = parseInt(stored, 10);
+            return limit >= 10 && limit <= 10000 ? limit : DEFAULT_SEARCH_LIMIT;
+        }
+        return DEFAULT_SEARCH_LIMIT;
+    } catch (error) {
+        console.error('Error loading search limit:', error);
+        return DEFAULT_SEARCH_LIMIT;
+    }
+}
+
+function setSearchLimit(limit) {
+    try {
+        const numLimit = parseInt(limit, 10);
+        if (numLimit >= 10 && numLimit <= 10000) {
+            localStorage.setItem(SEARCH_LIMIT_KEY, numLimit.toString());
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error saving search limit:', error);
+        return false;
+    }
+}
+
+function showSearchSettings() {
+    const settingsOverlay = document.getElementById('search-settings-overlay');
+    const searchInput = document.getElementById('search-limit-input');
+    
+    // Load current setting
+    searchInput.value = getSearchLimit();
+    
+    // Hide search results if open
+    hideSearchResults();
+    
+    // Show settings overlay
+    settingsOverlay.classList.add('show');
+}
+
+function hideSearchSettings() {
+    const settingsOverlay = document.getElementById('search-settings-overlay');
+    settingsOverlay.classList.remove('show');
+}
+
 function initializeBlameView() {
     const diffBtn = document.getElementById('diff-view-btn');
     const blameBtn = document.getElementById('blame-view-btn');
@@ -949,10 +1000,12 @@ async function performGlobalSearch(query) {
     const searchOverlay = document.getElementById('search-results-overlay');
     
     try {
+        const maxCommits = getSearchLimit();
         const results = await invoke('global_search', {
             path: currentRepoPath,
             query: query.trim(),
-            branchName: currentBranch
+            branchName: currentBranch,
+            maxCommits: maxCommits
         });
         
         displaySearchResults(results, query);
@@ -1103,6 +1156,11 @@ function hideSearchResults() {
 function initializeGlobalSearch() {
     const searchInput = document.getElementById('global-search');
     const searchOverlay = document.getElementById('search-results-overlay');
+    const settingsBtn = document.getElementById('search-settings-btn');
+    const settingsOverlay = document.getElementById('search-settings-overlay');
+    const saveBtn = document.getElementById('save-search-settings');
+    const cancelBtn = document.getElementById('cancel-search-settings');
+    const limitInput = document.getElementById('search-limit-input');
     
     // Real-time search with debouncing
     searchInput.addEventListener('input', (e) => {
@@ -1133,11 +1191,44 @@ function initializeGlobalSearch() {
         }
     });
     
-    // Hide results when clicking outside
+    // Hide results when clicking outside (but not settings)
     document.addEventListener('click', (e) => {
-        if (!searchInput.contains(e.target) && !searchOverlay.contains(e.target)) {
+        if (!searchInput.contains(e.target) && !searchOverlay.contains(e.target) && !settingsOverlay.contains(e.target) && !settingsBtn.contains(e.target)) {
             hideSearchResults();
+            hideSearchSettings();
         }
+    });
+    
+    // Search settings functionality
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (settingsOverlay.classList.contains('show')) {
+            hideSearchSettings();
+        } else {
+            showSearchSettings();
+        }
+    });
+    
+    saveBtn.addEventListener('click', () => {
+        const newLimit = limitInput.value;
+        if (setSearchLimit(newLimit)) {
+            hideSearchSettings();
+            // Show brief feedback
+            settingsBtn.textContent = '✓';
+            setTimeout(() => {
+                settingsBtn.textContent = '⚙️';
+            }, 1000);
+        } else {
+            // Show error feedback
+            limitInput.style.borderColor = '#dc3545';
+            setTimeout(() => {
+                limitInput.style.borderColor = '#dee2e6';
+            }, 2000);
+        }
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+        hideSearchSettings();
     });
     
     // Global keyboard shortcut (Ctrl+K or Cmd+K)

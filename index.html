@@ -225,6 +225,98 @@
         .search-result-commit-hash:active {
             transform: scale(0.95);
         }
+        .search-settings-btn {
+            position: absolute;
+            right: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        }
+        .search-settings-btn:hover {
+            background-color: #f0f0f0;
+        }
+        .search-settings-overlay {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            min-width: 300px;
+            z-index: 1001;
+            display: none;
+        }
+        .search-settings-overlay.show {
+            display: block;
+        }
+        .search-settings-content {
+            padding: 15px;
+        }
+        .search-settings-content h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 14px;
+        }
+        .setting-item {
+            margin-bottom: 15px;
+        }
+        .setting-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            font-size: 12px;
+            color: #333;
+        }
+        .setting-item input[type="number"] {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .setting-item small {
+            display: block;
+            margin-top: 4px;
+            color: #666;
+            font-size: 11px;
+        }
+        .setting-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .btn-primary, .btn-secondary {
+            padding: 6px 12px;
+            border: 1px solid;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background-color: #007acc;
+            border-color: #007acc;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #005a9e;
+            border-color: #005a9e;
+        }
+        .btn-secondary {
+            background-color: white;
+            border-color: #dee2e6;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background-color: #f8f9fa;
+        }
         .recent-repos-container {
             position: relative;
             display: flex;
@@ -596,8 +688,23 @@
             <div class="search-container">
                 <input type="text" class="global-search" id="global-search" placeholder="Search commits, files, content..." />
                 <span class="search-icon">🔍</span>
+                <button class="search-settings-btn" id="search-settings-btn" title="Search settings">⚙️</button>
                 <div class="search-results-overlay" id="search-results-overlay">
                     <!-- Search results will be populated here -->
+                </div>
+                <div class="search-settings-overlay" id="search-settings-overlay">
+                    <div class="search-settings-content">
+                        <h4>Search Settings</h4>
+                        <div class="setting-item">
+                            <label for="search-limit-input">Max commits to search:</label>
+                            <input type="number" id="search-limit-input" min="10" max="10000" value="100" />
+                            <small>Default: 100. Higher values may slow down search.</small>
+                        </div>
+                        <div class="setting-actions">
+                            <button id="save-search-settings" class="btn-primary">Save</button>
+                            <button id="cancel-search-settings" class="btn-secondary">Cancel</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="recent-repos-container">
