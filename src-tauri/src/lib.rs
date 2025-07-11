@@ -120,9 +120,22 @@ fn get_commits_from_path(path: String, branch_name: String) -> Result<Vec<GitCom
     let repo_path = Path::new(&path);
     let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
     
-    // Find the branch
-    let branch = repo.find_branch(&branch_name, git2::BranchType::Local)
-        .map_err(|e| e.to_string())?;
+    // Find the branch, with fallback to HEAD if branch not found
+    let branch = match repo.find_branch(&branch_name, git2::BranchType::Local) {
+        Ok(branch) => branch,
+        Err(_) => {
+            // If the specific branch doesn't exist, try to get the HEAD branch
+            let head = repo.head().map_err(|e| format!("Cannot find branch '{}' and HEAD reference not found: {}", branch_name, e))?;
+            if head.is_branch() {
+                repo.find_branch(
+                    head.shorthand().unwrap_or("HEAD"),
+                    git2::BranchType::Local
+                ).map_err(|e| format!("Cannot find branch '{}': {}", branch_name, e))?
+            } else {
+                return Err(format!("Cannot find branch '{}' and HEAD is not pointing to a branch", branch_name));
+            }
+        }
+    };
     let commit = branch.get().peel_to_commit().map_err(|e| e.to_string())?;
     
     let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;

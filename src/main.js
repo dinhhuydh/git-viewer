@@ -9,6 +9,7 @@ let selectedFile = null;
 
 // Recent repositories management
 const RECENT_REPOS_KEY = 'git-viewer-recent-repos';
+const LAST_REPO_KEY = 'git-viewer-last-repo';
 const MAX_RECENT_REPOS = 10;
 
 // Search settings
@@ -172,6 +173,13 @@ function displayCommits(commits) {
             });
         }
     });
+    
+    // Auto-select first commit if available
+    if (commitItems.length > 0) {
+        const firstCommitId = commitItems[0].dataset.commitId;
+        currentCommitIndex = 0;
+        selectCommit(firstCommitId);
+    }
 }
 
 async function selectCommit(commitId) {
@@ -765,6 +773,10 @@ async function openRepository(repoPath = null) {
         
         if (selected) {
             currentRepoPath = selected;
+            
+            // Save as last opened repository
+            localStorage.setItem(LAST_REPO_KEY, selected);
+            
             updateRepositoryName(selected);
             addToRecentRepositories(selected);
             await loadGitBranches(selected);
@@ -1464,6 +1476,18 @@ async function copyCommitHashToClipboard(commitId, element) {
     }
 }
 
+async function loadLastRepository() {
+    try {
+        const lastRepo = localStorage.getItem(LAST_REPO_KEY);
+        if (lastRepo) {
+            await openRepository(lastRepo);
+        }
+    } catch (error) {
+        console.error('Error loading last repository:', error);
+        // Don't show error to user, just silently fail
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const appWindow = getCurrentWindow();
     
@@ -1513,5 +1537,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize blame view
     initializeBlameView();
     
-    loadGitBranches();
+    // Load last opened repository
+    await loadLastRepository();
+    
+    // Load git branches for current repository if available
+    if (currentRepoPath) {
+        await loadGitBranches(currentRepoPath);
+    }
 });
