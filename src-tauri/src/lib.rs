@@ -253,7 +253,7 @@ fn get_file_diff(path: String, commit_id: String, file_path: String) -> Result<F
     let mut is_binary = false;
     
     // First pass: find if the file exists in this diff
-    for (delta_idx, delta) in diff.deltas().enumerate() {
+    for (_delta_idx, delta) in diff.deltas().enumerate() {
         let delta_path = delta.new_file().path()
             .or_else(|| delta.old_file().path())
             .and_then(|p| p.to_str())
@@ -303,7 +303,7 @@ fn get_file_diff(path: String, commit_id: String, file_path: String) -> Result<F
             
             if let Some(patch) = patch {
                 for hunk_idx in 0..patch.num_hunks() {
-                    let (hunk, hunk_lines) = patch.hunk(hunk_idx).map_err(|e| format!("Failed to get hunk: {}", e))?;
+                    let (_hunk, hunk_lines) = patch.hunk(hunk_idx).map_err(|e| format!("Failed to get hunk: {}", e))?;
                     
                     for line_idx in 0..hunk_lines {
                         let line = patch.line_in_hunk(hunk_idx, line_idx).map_err(|e| format!("Failed to get line: {}", e))?;
@@ -391,7 +391,7 @@ fn global_search(path: String, query: String, branch_name: Option<String>, max_c
     search_commits_and_content(&repo, revwalk, &query_lower, max_commits)
 }
 
-fn search_commits_and_content(repo: &git2::Repository, mut revwalk: git2::Revwalk, query: &str, max_commits: Option<u32>) -> Result<Vec<SearchResult>, String> {
+fn search_commits_and_content(repo: &git2::Repository, revwalk: git2::Revwalk, query: &str, max_commits: Option<u32>) -> Result<Vec<SearchResult>, String> {
     let mut results = Vec::new();
     let mut count = 0;
     const MAX_RESULTS: usize = 50;
