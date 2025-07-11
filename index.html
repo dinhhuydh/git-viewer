@@ -114,7 +114,7 @@
             border-bottom: 2px solid #dee2e6;
             padding: 15px 20px;
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
             align-items: center;
         }
         .app-title {
@@ -453,6 +453,52 @@
             border-color: #007acc;
             box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
         }
+        .remote-selector {
+            width: 100%;
+            padding: 8px 12px;
+            margin-top: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background-color: white;
+            font-size: 14px;
+            font-family: monospace;
+            cursor: pointer;
+        }
+        .remote-selector:focus {
+            outline: none;
+            border-color: #007acc;
+            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+        }
+        .selector-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .selector-icon {
+            font-size: 16px;
+            min-width: 20px;
+            text-align: center;
+        }
+        .selector-container .branch-selector,
+        .selector-container .remote-selector {
+            margin-top: 0;
+            flex: 1;
+        }
+        .selectors-container {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .selectors-container .selector-container {
+            margin-top: 0;
+        }
+        .selectors-container .branch-selector,
+        .selectors-container .remote-selector {
+            min-width: 150px;
+            font-size: 12px;
+            padding: 6px 10px;
+        }
         .commit-item {
             padding: 12px 15px;
             border-bottom: 1px solid #eee;
@@ -749,6 +795,20 @@
 <body>
     <!-- App Header -->
     <div class="app-header">
+        <div class="selectors-container">
+            <div class="selector-container">
+                <span class="selector-icon">🗂️</span>
+                <select id="remote-selector" class="remote-selector">
+                    <option value="">Select a remote...</option>
+                </select>
+            </div>
+            <div class="selector-container">
+                <span class="selector-icon">🌿</span>
+                <select id="branch-selector" class="branch-selector">
+                    <option value="">Select a branch...</option>
+                </select>
+            </div>
+        </div>
         <div class="header-right">
             <div class="search-container">
                 <input type="text" class="global-search" id="global-search" placeholder="Search commits, files, content..." />
@@ -792,9 +852,6 @@
             <div class="resize-handle right" id="commits-sidebar-resize-right"></div>
             <div class="sidebar-header">
                 Commits
-                <select id="branch-selector" class="branch-selector">
-                    <option value="">Select a branch...</option>
-                </select>
             </div>
             <div id="commits">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a branch to view commits</p>

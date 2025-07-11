@@ -184,11 +184,29 @@ async function loadGitBranches(repoPath = null) {
             branches = await invoke('get_git_branches');
         }
         displayBranches(branches);
+        
+        // Also load remotes when loading branches
+        if (repoPath) {
+            await loadGitRemotes(repoPath);
+        }
     } catch (error) {
         console.error('Error loading git branches:', error);
         const branchSelector = document.getElementById('branch-selector');
         if (branchSelector) {
             branchSelector.innerHTML = '<option value="">Error loading branches</option>';
+        }
+    }
+}
+
+async function loadGitRemotes(repoPath) {
+    try {
+        const remotes = await invoke('get_git_remotes_from_path', { path: repoPath });
+        displayRemotes(remotes);
+    } catch (error) {
+        console.error('Error loading git remotes:', error);
+        const remoteSelector = document.getElementById('remote-selector');
+        if (remoteSelector) {
+            remoteSelector.innerHTML = '<option value="">Error loading remotes</option>';
         }
     }
 }
@@ -237,6 +255,52 @@ async function selectBranch(branchName) {
     }
     
     await loadCommits(branchName);
+}
+
+function displayRemotes(remotes) {
+    const remoteSelector = document.getElementById('remote-selector');
+    
+    if (remotes.length === 0) {
+        remoteSelector.innerHTML = '<option value="">No remotes found</option>';
+        return;
+    }
+    
+    // Group remotes by name to highlight current/default remote
+    const remoteGroups = {};
+    remotes.forEach(remote => {
+        const baseName = remote.name.replace(' (push)', '');
+        if (!remoteGroups[baseName]) {
+            remoteGroups[baseName] = [];
+        }
+        remoteGroups[baseName].push(remote);
+    });
+    
+    // Populate remote selector dropdown
+    const remoteOptions = Object.keys(remoteGroups).map(remoteName => {
+        const remoteGroup = remoteGroups[remoteName];
+        const mainRemote = remoteGroup.find(r => !r.is_push) || remoteGroup[0];
+        const isOrigin = remoteName === 'origin';
+        
+        return `<option value="${remoteName}" ${isOrigin ? 'selected' : ''}>${remoteName}${isOrigin ? ' (current)' : ''}</option>`;
+    }).join('');
+    
+    remoteSelector.innerHTML = remoteOptions;
+    
+    // Add change listener to remote selector
+    const newRemoteSelector = remoteSelector.cloneNode(true);
+    remoteSelector.parentNode.replaceChild(newRemoteSelector, remoteSelector);
+    
+    newRemoteSelector.addEventListener('change', (e) => {
+        const selectedRemote = e.target.value;
+        if (selectedRemote) {
+            const remoteGroup = remoteGroups[selectedRemote];
+            if (remoteGroup && remoteGroup.length > 0) {
+                const mainRemote = remoteGroup.find(r => !r.is_push) || remoteGroup[0];
+                console.log(`Selected remote: ${selectedRemote} (${mainRemote.url})`);
+                // Here you could add functionality to switch remote context
+            }
+        }
+    });
 }
 
 async function loadCommits(branchName) {

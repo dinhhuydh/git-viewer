@@ -10,6 +10,13 @@ pub struct GitBranch {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct GitRemote {
+    name: String,
+    url: String,
+    is_push: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GitCommit {
     id: String,
     message: String,
@@ -113,6 +120,43 @@ fn get_git_branches_from_path(path: String) -> Result<Vec<GitBranch>, String> {
     }
     
     Ok(branches)
+}
+
+#[tauri::command]
+fn get_git_remotes_from_path(path: String) -> Result<Vec<GitRemote>, String> {
+    let repo_path = Path::new(&path);
+    let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    let mut remotes = Vec::new();
+    let remote_names = repo.remotes().map_err(|e| e.to_string())?;
+    
+    for remote_name in remote_names.iter() {
+        if let Some(name) = remote_name {
+            let remote = repo.find_remote(name).map_err(|e| e.to_string())?;
+            
+            // Get fetch URL
+            if let Some(fetch_url) = remote.url() {
+                remotes.push(GitRemote {
+                    name: name.to_string(),
+                    url: fetch_url.to_string(),
+                    is_push: false,
+                });
+            }
+            
+            // Get push URL if different from fetch URL
+            if let Some(push_url) = remote.pushurl() {
+                if push_url != remote.url().unwrap_or("") {
+                    remotes.push(GitRemote {
+                        name: format!("{} (push)", name),
+                        url: push_url.to_string(),
+                        is_push: true,
+                    });
+                }
+            }
+        }
+    }
+    
+    Ok(remotes)
 }
 
 #[tauri::command]
@@ -661,7 +705,7 @@ fn get_file_blame(path: String, commit_id: String, file_path: String) -> Result<
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame])
+    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_git_remotes_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
