@@ -616,6 +616,239 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+        .main-view-controls {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .main-view-toggle-btn {
+            padding: 8px 16px;
+            border: 1px solid #007acc;
+            background-color: white;
+            color: #007acc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .main-view-toggle-btn:hover {
+            background-color: #f0f8ff;
+        }
+        .main-view-toggle-btn.active {
+            background-color: #007acc;
+            color: white;
+        }
+        .explorer-panel {
+            width: 300px;
+            min-width: 200px;
+            max-width: 600px;
+            background-color: white;
+            border-left: 1px solid #dee2e6;
+            overflow-y: auto;
+            position: relative;
+        }
+        .explorer-panel:focus {
+            outline: 2px solid #007acc;
+            outline-offset: -2px;
+        }
+        .file-tree {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+        .file-tree-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+            font-size: 13px;
+        }
+        .file-tree-item:hover {
+            background-color: #f8f9fa;
+        }
+        .file-tree-item.selected {
+            background-color: #e7f3ff;
+            border-left: 3px solid #007acc;
+        }
+        .file-tree-item.directory {
+            font-weight: 500;
+        }
+        .file-tree-item.directory .file-tree-icon {
+            color: #ffc107;
+        }
+        .file-tree-indent {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+        }
+        .file-tree-toggle {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 10px;
+            color: #666;
+            transition: transform 0.2s;
+        }
+        .file-tree-toggle.expanded {
+            transform: rotate(90deg);
+        }
+        .file-tree-toggle:hover {
+            background-color: #e9ecef;
+            border-radius: 2px;
+        }
+        .file-tree-icon {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 6px;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .file-tree-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-tree-size {
+            font-size: 11px;
+            color: #666;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        .file-tree-children {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            padding-left: 16px;
+        }
+        .file-tree-children.collapsed {
+            display: none;
+        }
+        .file-tree-item.filtered-hidden {
+            display: none;
+        }
+        .file-tree-item.filtered-match {
+            background-color: #fff3cd;
+        }
+        .file-tree-name.fuzzy-highlight {
+            background-color: #ffc107;
+            color: #000;
+            font-weight: bold;
+            padding: 1px 2px;
+            border-radius: 2px;
+        }
+        .filtered-results-header {
+            padding: 8px 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 12px;
+            font-weight: 500;
+            color: #666;
+        }
+        .filtered-results {
+            padding: 0;
+        }
+        .filtered-file-item {
+            border-bottom: 1px solid #f1f1f1;
+        }
+        .filtered-file-item:last-child {
+            border-bottom: none;
+        }
+        .filtered-file-item .file-tree-item {
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .filtered-file-item .file-tree-item:hover {
+            background-color: #f8f9fa;
+        }
+        .filtered-file-item .file-tree-item.selected {
+            background-color: #e7f3ff;
+            border-left: 3px solid #007acc;
+        }
+        .filtered-file-info {
+            flex: 1;
+            min-width: 0;
+            margin-left: 8px;
+        }
+        .filtered-file-info .file-tree-name {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+        .filtered-file-path {
+            font-size: 11px;
+            color: #666;
+            font-family: monospace;
+            opacity: 0.8;
+        }
+        .filtered-file-item .file-tree-size {
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        .file-content-viewer {
+            flex: 1;
+            background-color: white;
+            border-left: 1px solid #dee2e6;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+        }
+        .file-content-header {
+            background-color: #f1f8ff;
+            padding: 10px;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: bold;
+            color: #0366d6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-content-body {
+            padding: 0;
+        }
+        .file-content-line {
+            display: flex;
+            font-size: 13px;
+            line-height: 1.4;
+            border-bottom: 1px solid #f1f1f1;
+        }
+        .file-content-line-number {
+            background-color: #f8f9fa;
+            color: #666;
+            padding: 2px 8px;
+            min-width: 50px;
+            text-align: right;
+            border-right: 1px solid #dee2e6;
+            user-select: none;
+            font-size: 11px;
+        }
+        .file-content-line-content {
+            padding: 2px 8px;
+            flex: 1;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .explorer-container {
+            display: flex;
+            height: calc(100vh - 60px);
+            background-color: #f5f5f5;
+        }
+        .loading-explorer {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+        }
         .blame-line {
             display: flex;
             font-family: 'Courier New', monospace;
@@ -796,6 +1029,10 @@
     <!-- App Header -->
     <div class="app-header">
         <div class="selectors-container">
+            <div class="main-view-controls">
+                <button id="diff-mode-btn" class="main-view-toggle-btn active">Diff View</button>
+                <button id="explorer-mode-btn" class="main-view-toggle-btn">Explorer</button>
+            </div>
             <div class="selector-container">
                 <span class="selector-icon">🗂️</span>
                 <select id="remote-selector" class="remote-selector">
@@ -884,6 +1121,43 @@
             </div>
         </div>
     </div>
+
+    <!-- Explorer Container (Initially Hidden) -->
+    <div class="explorer-container" id="explorer-container" style="display: none;">
+        <!-- Commits Sidebar -->
+        <div class="commits-sidebar" id="explorer-commits-sidebar" tabindex="0">
+            <div class="resize-handle right" id="explorer-commits-sidebar-resize-right"></div>
+            <div class="sidebar-header">
+                Commits
+            </div>
+            <div id="explorer-commits">
+                <p style="padding: 15px; color: #666; font-style: italic;">Select a branch to view commits</p>
+            </div>
+        </div>
+
+        <!-- File Explorer Panel -->
+        <div class="explorer-panel" id="explorer-panel" tabindex="0">
+            <div class="resize-handle right" id="explorer-panel-resize-right"></div>
+            <div class="panel-header-with-filter">
+                File Explorer
+                <input type="text" class="filter-input" id="explorer-filter" placeholder="Filter files (fuzzy search)..." />
+            </div>
+            <div id="file-explorer">
+                <p style="padding: 15px; color: #666; font-style: italic;">Select a commit to explore files</p>
+            </div>
+        </div>
+
+        <!-- File Content Viewer -->
+        <div class="file-content-viewer">
+            <div class="file-content-header" id="file-content-header">
+                <span>File Content</span>
+            </div>
+            <div class="file-content-body" id="file-content-body">
+                <p style="padding: 15px; color: #666; font-style: italic;">Select a file to view its content</p>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>

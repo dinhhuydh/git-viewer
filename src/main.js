@@ -175,6 +175,15 @@ let isSearching = false;
 let currentViewMode = 'diff'; // 'diff' or 'blame'
 let currentBlameData = null;
 
+// Main view mode
+let currentMainViewMode = 'diff'; // 'diff' or 'explorer'
+
+// Explorer view
+let currentFileTree = null;
+let expandedDirectories = new Set();
+let selectedExplorerFile = null;
+let explorerFilterText = '';
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -328,6 +337,11 @@ function displayCommits(commits) {
         commitsDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No commits found</p>';
         commitItems = [];
         currentCommitIndex = -1;
+        
+        // Also update explorer view
+        if (currentMainViewMode === 'explorer') {
+            updateExplorerCommits();
+        }
         return;
     }
     
@@ -367,6 +381,11 @@ function displayCommits(commits) {
             });
         }
     });
+    
+    // Update explorer view if it's currently active
+    if (currentMainViewMode === 'explorer') {
+        updateExplorerCommits();
+    }
     
     // Auto-select first commit if available
     if (commitItems.length > 0) {
@@ -415,6 +434,19 @@ async function selectCommit(commitId) {
     
     // Update the file panel header to show current commit
     updateFilePanelHeader(commitId);
+    
+    // If we're in explorer mode, also update the explorer view
+    if (currentMainViewMode === 'explorer') {
+        await loadFileTree(commitId);
+        // Update commit selection in explorer view
+        document.querySelectorAll('#explorer-commits .commit-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+        const explorerSelectedElement = document.querySelector(`#explorer-commits [data-commit-id="${commitId}"]`);
+        if (explorerSelectedElement) {
+            explorerSelectedElement.classList.add('selected');
+        }
+    }
     
     await loadFileChanges(commitId);
 }
@@ -800,6 +832,545 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function switchToMainViewMode(mode) {
+    if (currentMainViewMode === mode) return;
+    
+    currentMainViewMode = mode;
+    
+    const diffContainer = document.querySelector('.container');
+    const explorerContainer = document.getElementById('explorer-container');
+    const diffModeBtn = document.getElementById('diff-mode-btn');
+    const explorerModeBtn = document.getElementById('explorer-mode-btn');
+    
+    if (mode === 'diff') {
+        diffContainer.style.display = 'flex';
+        explorerContainer.style.display = 'none';
+        diffModeBtn.classList.add('active');
+        explorerModeBtn.classList.remove('active');
+    } else {
+        diffContainer.style.display = 'none';
+        explorerContainer.style.display = 'flex';
+        diffModeBtn.classList.remove('active');
+        explorerModeBtn.classList.add('active');
+        
+        // Update explorer view with current commits and selected commit
+        updateExplorerCommits();
+        
+        // Load explorer view if we have a selected commit
+        if (selectedCommit && currentRepoPath) {
+            loadFileTree(selectedCommit);
+        }
+    }
+}
+
+function updateExplorerCommits() {
+    const explorerCommitsDiv = document.getElementById('explorer-commits');
+    const originalCommitsDiv = document.getElementById('commits');
+    
+    if (!explorerCommitsDiv || !originalCommitsDiv) return;
+    
+    // Copy HTML content from diff view commits
+    explorerCommitsDiv.innerHTML = originalCommitsDiv.innerHTML;
+    
+    // Add click listeners to explorer commits
+    const explorerCommitItems = explorerCommitsDiv.querySelectorAll('.commit-item');
+    explorerCommitItems.forEach((commitItem) => {
+        commitItem.addEventListener('click', () => {
+            const commitId = commitItem.dataset.commitId;
+            selectExplorerCommit(commitId);
+        });
+        
+        // Add hash copy listeners
+        const commitHashElement = commitItem.querySelector('.commit-id');
+        if (commitHashElement) {
+            commitHashElement.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                copyCommitHashToClipboard(commitItem.dataset.commitId, commitHashElement);
+            });
+        }
+    });
+    
+    // If we have a selected commit, make sure it's selected in explorer view too
+    if (selectedCommit) {
+        const selectedElement = explorerCommitsDiv.querySelector(`[data-commit-id="${selectedCommit}"]`);
+        if (selectedElement) {
+            selectedElement.classList.add('selected');
+        }
+    }
+}
+
+async function loadExplorerView(commitId) {
+    if (!currentRepoPath) return;
+    
+    try {
+        // Update commits in explorer view
+        updateExplorerCommits();
+        
+        // Load file tree for the selected commit
+        await loadFileTree(commitId);
+    } catch (error) {
+        console.error('Error loading explorer view:', error);
+        document.getElementById('file-explorer').innerHTML = `<p style="padding: 15px; color: #dc3545;">Error: ${error}</p>`;
+    }
+}
+
+async function selectExplorerCommit(commitId) {
+    // Update commit selection in explorer view
+    document.querySelectorAll('#explorer-commits .commit-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    
+    const selectedElement = document.querySelector(`#explorer-commits [data-commit-id="${commitId}"]`);
+    if (selectedElement) {
+        selectedElement.classList.add('selected');
+    }
+    
+    selectedCommit = commitId;
+    await loadFileTree(commitId);
+}
+
+async function loadFileTree(commitId) {
+    if (!currentRepoPath) return;
+    
+    const explorerDiv = document.getElementById('file-explorer');
+    
+    try {
+        explorerDiv.innerHTML = '<div class="loading-explorer"><div class="loading-spinner"></div><p>Loading file tree...</p></div>';
+        
+        const fileTree = await invoke('get_commit_file_tree', {
+            path: currentRepoPath,
+            commitId: commitId
+        });
+        
+        currentFileTree = fileTree;
+        
+        // Auto-expand root level directories for better UX
+        fileTree.forEach(item => {
+            if (item.is_directory) {
+                expandedDirectories.add(item.path);
+            }
+        });
+        
+        // Clear filter when loading new commit
+        const filterInput = document.getElementById('explorer-filter');
+        if (filterInput) {
+            filterInput.value = '';
+            explorerFilterText = '';
+        }
+        
+        displayFileTree(fileTree);
+    } catch (error) {
+        console.error('Error loading file tree:', error);
+        explorerDiv.innerHTML = `<p style="padding: 15px; color: #dc3545;">Error: ${error}</p>`;
+    }
+}
+
+function getFileIcon(fileType, isDirectory) {
+    if (isDirectory) {
+        return '📁';
+    }
+    
+    const iconMap = {
+        'javascript': '📄',
+        'typescript': '🔷', 
+        'python': '🐍',
+        'rust': '🦀',
+        'java': '☕',
+        'go': '🐹',
+        'c': '⚙️',
+        'cpp': '⚙️',
+        'css': '🎨',
+        'html': '🌐',
+        'json': '📋',
+        'yaml': '📝',
+        'markdown': '📖',
+        'shell': '🖥️',
+        'sql': '🗃️',
+        'xml': '📄',
+        'toml': '📝',
+        'config': '📝',
+        'docker': '🐳',
+        'git': '🔧',
+        'text': '📄',
+        'folder': '📁'
+    };
+    
+    return iconMap[fileType] || '📄';
+}
+
+function formatFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+    return `${Math.round(bytes / (1024 * 1024))}MB`;
+}
+
+function displayFileTree(items) {
+    const explorerDiv = document.getElementById('file-explorer');
+    const treeHtml = buildFileTreeHtml(items, 0);
+    explorerDiv.innerHTML = `<ul class="file-tree">${treeHtml}</ul>`;
+    
+    // Add event listeners
+    initializeFileTreeInteractions();
+    
+    // Apply current filter if any
+    const filterInput = document.getElementById('explorer-filter');
+    if (filterInput && filterInput.value) {
+        filterExplorerFiles(filterInput.value);
+    }
+}
+
+function buildFileTreeHtml(items, depth) {
+    return items.map(item => {
+        const icon = getFileIcon(item.file_type, item.is_directory);
+        const sizeText = item.size ? formatFileSize(item.size) : '';
+        const isExpanded = expandedDirectories.has(item.path);
+        
+        let html = `<li data-path="${item.path}" data-is-directory="${item.is_directory}">`;
+        html += `<div class="file-tree-item ${item.is_directory ? 'directory' : 'file'}">`;
+        
+        // Add indentation
+        for (let i = 0; i < depth; i++) {
+            html += '<span class="file-tree-indent"></span>';
+        }
+        
+        // Add toggle for directories
+        if (item.is_directory) {
+            html += `<span class="file-tree-toggle ${isExpanded ? 'expanded' : ''}" data-path="${item.path}">▶</span>`;
+        } else {
+            html += '<span class="file-tree-indent"></span>';
+        }
+        
+        html += `<span class="file-tree-icon">${icon}</span>`;
+        html += `<span class="file-tree-name">${item.name}</span>`;
+        if (sizeText) {
+            html += `<span class="file-tree-size">${sizeText}</span>`;
+        }
+        html += '</div>'; // Close file-tree-item div
+        
+        // Add children if directory has them
+        if (item.is_directory && item.children && item.children.length > 0) {
+            const childrenClass = isExpanded ? 'file-tree-children' : 'file-tree-children collapsed';
+            html += `<ul class="${childrenClass}">${buildFileTreeHtml(item.children, depth + 1)}</ul>`;
+        }
+        
+        html += '</li>';
+        
+        return html;
+    }).join('');
+}
+
+function initializeFileTreeInteractions() {
+    const explorerDiv = document.getElementById('file-explorer');
+    
+    // Handle directory toggle
+    explorerDiv.addEventListener('click', (e) => {
+        if (e.target.classList.contains('file-tree-toggle')) {
+            e.stopPropagation();
+            const path = e.target.dataset.path;
+            toggleDirectory(path, e.target);
+        }
+    });
+    
+    // Handle file/directory selection
+    explorerDiv.addEventListener('click', (e) => {
+        const treeItem = e.target.closest('.file-tree-item');
+        if (treeItem) {
+            const listItem = treeItem.closest('li');
+            const path = listItem.dataset.path;
+            const isDirectory = listItem.dataset.isDirectory === 'true';
+            
+            if (isDirectory) {
+                // Toggle directory on click
+                const toggleElement = treeItem.querySelector('.file-tree-toggle');
+                if (toggleElement) {
+                    toggleDirectory(path, toggleElement);
+                }
+            } else {
+                // Select file
+                selectExplorerFile(path, treeItem);
+            }
+        }
+    });
+}
+
+function toggleDirectory(path, toggleElement) {
+    const listItem = toggleElement.closest('li');
+    const childrenElement = listItem.querySelector('.file-tree-children');
+    
+    if (expandedDirectories.has(path)) {
+        // Collapse
+        expandedDirectories.delete(path);
+        toggleElement.classList.remove('expanded');
+        if (childrenElement) {
+            childrenElement.classList.add('collapsed');
+        }
+    } else {
+        // Expand
+        expandedDirectories.add(path);
+        toggleElement.classList.add('expanded');
+        if (childrenElement) {
+            childrenElement.classList.remove('collapsed');
+        }
+    }
+}
+
+async function selectExplorerFile(filePath, treeItem) {
+    if (!currentRepoPath || !selectedCommit) return;
+    
+    selectedExplorerFile = filePath;
+    
+    // Update selection UI
+    document.querySelectorAll('.file-tree-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    treeItem.classList.add('selected');
+    
+    // Load file content
+    await loadFileContent(filePath);
+}
+
+async function loadFileContent(filePath) {
+    if (!currentRepoPath || !selectedCommit) return;
+    
+    const contentHeader = document.getElementById('file-content-header');
+    const contentBody = document.getElementById('file-content-body');
+    
+    try {
+        contentHeader.innerHTML = `<span>${filePath}</span>`;
+        contentBody.innerHTML = '<div class="loading-explorer"><div class="loading-spinner"></div><p>Loading file content...</p></div>';
+        
+        const content = await invoke('get_file_content', {
+            path: currentRepoPath,
+            commitId: selectedCommit,
+            filePath: filePath
+        });
+        
+        displayFileContent(filePath, content);
+    } catch (error) {
+        console.error('Error loading file content:', error);
+        contentBody.innerHTML = `<p style="padding: 15px; color: #dc3545;">Error: ${error}</p>`;
+    }
+}
+
+function displayFileContent(filePath, content) {
+    const contentBody = document.getElementById('file-content-body');
+    const language = getLanguageFromFileName(filePath);
+    
+    const lines = content.split('\n');
+    const linesHtml = lines.map((line, index) => {
+        const lineNumber = index + 1;
+        const highlightedContent = highlightCode(line, language);
+        
+        return `
+            <div class="file-content-line">
+                <div class="file-content-line-number">${lineNumber}</div>
+                <div class="file-content-line-content">${highlightedContent}</div>
+            </div>
+        `;
+    }).join('');
+    
+    contentBody.innerHTML = linesHtml;
+}
+
+// Fuzzy search implementation
+function fuzzyMatch(pattern, text) {
+    if (!pattern) return { matches: true, score: 0, highlights: [] };
+    if (!text) return { matches: false, score: 0, highlights: [] };
+    
+    pattern = pattern.toLowerCase();
+    text = text.toLowerCase();
+    
+    let patternIndex = 0;
+    let textIndex = 0;
+    let score = 0;
+    let highlights = [];
+    let consecutiveMatches = 0;
+    
+    while (patternIndex < pattern.length && textIndex < text.length) {
+        if (pattern[patternIndex] === text[textIndex]) {
+            highlights.push(textIndex);
+            consecutiveMatches++;
+            score += consecutiveMatches * 2; // Bonus for consecutive matches
+            patternIndex++;
+        } else {
+            consecutiveMatches = 0;
+        }
+        textIndex++;
+    }
+    
+    // Check if all pattern characters were matched
+    const matches = patternIndex === pattern.length;
+    
+    if (matches) {
+        // Bonus for matches at word boundaries
+        highlights.forEach(index => {
+            if (index === 0 || text[index - 1] === '/' || text[index - 1] === '.') {
+                score += 5;
+            }
+        });
+        
+        // Penalty for longer text (prefer shorter matches)
+        score -= text.length * 0.1;
+    }
+    
+    return { matches, score, highlights };
+}
+
+function highlightFuzzyMatch(text, highlights) {
+    if (!highlights || highlights.length === 0) return text;
+    
+    let result = '';
+    let lastIndex = 0;
+    
+    highlights.forEach(index => {
+        result += text.substring(lastIndex, index);
+        result += `<span class="fuzzy-highlight">${text[index]}</span>`;
+        lastIndex = index + 1;
+    });
+    
+    result += text.substring(lastIndex);
+    return result;
+}
+
+function flattenFileTree(items, currentPath = '') {
+    let flatItems = [];
+    
+    items.forEach(item => {
+        const fullPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+        flatItems.push({
+            ...item,
+            fullPath: fullPath,
+            displayPath: item.path
+        });
+        
+        if (item.is_directory && item.children) {
+            flatItems = flatItems.concat(flattenFileTree(item.children, fullPath));
+        }
+    });
+    
+    return flatItems;
+}
+
+function filterExplorerFiles(filterText) {
+    explorerFilterText = filterText.trim();
+    
+    if (!currentFileTree) return;
+    
+    const explorerDiv = document.getElementById('file-explorer');
+    
+    if (!explorerFilterText) {
+        // No filter - show normal tree structure
+        displayFileTree(currentFileTree);
+        return;
+    }
+    
+    // Get all file items (not directories)
+    const fileItems = flattenFileTree(currentFileTree).filter(item => !item.is_directory);
+    
+    // Score and filter items
+    const matchedItems = fileItems.map(item => {
+        const nameMatch = fuzzyMatch(explorerFilterText, item.name);
+        const pathMatch = fuzzyMatch(explorerFilterText, item.displayPath);
+        
+        // Use the best match
+        const match = nameMatch.score >= pathMatch.score ? nameMatch : pathMatch;
+        const searchText = nameMatch.score >= pathMatch.score ? item.name : item.displayPath;
+        
+        return {
+            ...item,
+            fuzzyMatch: match,
+            searchText: searchText
+        };
+    }).filter(item => item.fuzzyMatch.matches)
+      .sort((a, b) => b.fuzzyMatch.score - a.fuzzyMatch.score);
+    
+    // Show filtered results as a flat list
+    if (matchedItems.length === 0) {
+        explorerDiv.innerHTML = '<div style="padding: 15px; color: #666; font-style: italic;">No files match your search</div>';
+        return;
+    }
+    
+    // Add results counter
+    const resultsHeader = `<div class="filtered-results-header">${matchedItems.length} file${matchedItems.length === 1 ? '' : 's'} found</div>`;
+    
+    const flatListHtml = matchedItems.map(item => {
+        const icon = getFileIcon(item.file_type, item.is_directory);
+        const highlightedName = item.searchText === item.name ? 
+            highlightFuzzyMatch(item.name, item.fuzzyMatch.highlights) : 
+            item.name;
+        
+        // Show directory path as subtitle for context
+        const directoryPath = item.displayPath.includes('/') ? 
+            item.displayPath.substring(0, item.displayPath.lastIndexOf('/')) : 
+            '';
+        
+        return `
+            <div class="filtered-file-item" data-path="${item.displayPath}" data-is-directory="false">
+                <div class="file-tree-item file filtered-match">
+                    <span class="file-tree-icon">${icon}</span>
+                    <div class="filtered-file-info">
+                        <div class="file-tree-name">${highlightedName}</div>
+                        ${directoryPath ? `<div class="filtered-file-path">${directoryPath}</div>` : ''}
+                    </div>
+                    <span class="file-tree-size">${item.size ? formatFileSize(item.size) : ''}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    explorerDiv.innerHTML = `${resultsHeader}<div class="filtered-results">${flatListHtml}</div>`;
+    
+    // Add click listeners for filtered items
+    initializeFilteredFileInteractions();
+}
+
+function expandParentDirectories(filePath) {
+    const pathParts = filePath.split('/');
+    let currentPath = '';
+    
+    for (let i = 0; i < pathParts.length - 1; i++) {
+        currentPath = currentPath ? `${currentPath}/${pathParts[i]}` : pathParts[i];
+        expandedDirectories.add(currentPath);
+        
+        // Update UI for expanded directory
+        const toggleElement = document.querySelector(`[data-path="${currentPath}"] .file-tree-toggle`);
+        if (toggleElement) {
+            toggleElement.classList.add('expanded');
+        }
+        
+        const childrenElement = document.querySelector(`li[data-path="${currentPath}"] .file-tree-children`);
+        if (childrenElement) {
+            childrenElement.classList.remove('collapsed');
+        }
+    }
+}
+
+function initializeFilteredFileInteractions() {
+    const explorerDiv = document.getElementById('file-explorer');
+    
+    // Handle file selection in filtered view
+    explorerDiv.addEventListener('click', (e) => {
+        const filteredItem = e.target.closest('.filtered-file-item');
+        if (filteredItem) {
+            const filePath = filteredItem.dataset.path;
+            
+            // Update selection UI
+            document.querySelectorAll('.filtered-file-item .file-tree-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            const treeItem = filteredItem.querySelector('.file-tree-item');
+            if (treeItem) {
+                treeItem.classList.add('selected');
+            }
+            
+            // Select the file
+            selectExplorerFile(filePath, treeItem);
+        }
+    });
 }
 
 function getSearchLimit() {
@@ -1681,6 +2252,37 @@ async function copyCommitHashToClipboard(commitId, element) {
     }
 }
 
+function initializeExplorerFilter() {
+    const filterInput = document.getElementById('explorer-filter');
+    if (!filterInput) return;
+    
+    let filterTimeout = null;
+    
+    // Real-time filtering with debouncing
+    filterInput.addEventListener('input', (e) => {
+        const query = e.target.value;
+        
+        // Clear previous timeout
+        if (filterTimeout) {
+            clearTimeout(filterTimeout);
+        }
+        
+        // Debounce filter to avoid too many updates
+        filterTimeout = setTimeout(() => {
+            filterExplorerFiles(query);
+        }, 150);
+    });
+    
+    // Clear filter on Escape
+    filterInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            filterInput.value = '';
+            filterExplorerFiles('');
+            filterInput.blur();
+        }
+    });
+}
+
 async function loadLastRepository() {
     try {
         const lastRepo = localStorage.getItem(LAST_REPO_KEY);
@@ -1700,6 +2302,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     await appWindow.listen('menu-open-repo', () => {
         openRepository();
     });
+    
+    // Initialize main view mode buttons
+    const diffModeBtn = document.getElementById('diff-mode-btn');
+    const explorerModeBtn = document.getElementById('explorer-mode-btn');
+    
+    diffModeBtn.addEventListener('click', () => {
+        switchToMainViewMode('diff');
+    });
+    
+    explorerModeBtn.addEventListener('click', () => {
+        switchToMainViewMode('explorer');
+    });
+    
+    // Initialize explorer filter
+    initializeExplorerFilter();
     
     // Setup recent repositories dropdown
     const recentReposButton = document.getElementById('recent-repos-button');

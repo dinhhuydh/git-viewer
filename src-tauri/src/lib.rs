@@ -80,6 +80,16 @@ pub struct FileBlame {
     blame_lines: Vec<BlameInfo>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileTreeItem {
+    name: String,
+    path: String,
+    is_directory: bool,
+    children: Option<Vec<FileTreeItem>>,
+    size: Option<u64>,
+    file_type: String,
+}
+
 #[tauri::command]
 fn get_git_branches() -> Result<Vec<GitBranch>, String> {
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
@@ -701,11 +711,146 @@ fn get_file_blame(path: String, commit_id: String, file_path: String) -> Result<
     })
 }
 
+#[tauri::command]
+fn get_commit_file_tree(path: String, commit_id: String) -> Result<Vec<FileTreeItem>, String> {
+    let repo_path = Path::new(&path);
+    let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    let oid = git2::Oid::from_str(&commit_id).map_err(|e| e.to_string())?;
+    let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    let tree = commit.tree().map_err(|e| e.to_string())?;
+    
+    fn get_file_type(name: &str) -> String {
+        let extension = name.split('.').last().unwrap_or("").to_lowercase();
+        match extension.as_str() {
+            "js" | "jsx" => "javascript",
+            "ts" | "tsx" => "typescript", 
+            "py" => "python",
+            "rs" => "rust",
+            "java" => "java",
+            "go" => "go",
+            "c" | "h" => "c",
+            "cpp" | "cc" | "cxx" | "hpp" => "cpp",
+            "css" | "scss" | "sass" => "css",
+            "html" | "htm" => "html",
+            "json" => "json",
+            "yaml" | "yml" => "yaml",
+            "md" | "markdown" => "markdown",
+            "sh" | "bash" | "zsh" => "shell",
+            "sql" => "sql",
+            "xml" => "xml",
+            "toml" => "toml",
+            "ini" | "cfg" | "conf" => "config",
+            "dockerfile" => "docker",
+            "gitignore" => "git",
+            "txt" => "text",
+            _ => "file"
+        }.to_string()
+    }
+    
+    fn build_tree_recursive(
+        repo: &git2::Repository,
+        tree: &git2::Tree,
+        base_path: &str,
+    ) -> Result<Vec<FileTreeItem>, String> {
+        let mut items = Vec::new();
+        
+        for entry in tree.iter() {
+            let name = entry.name().unwrap_or("unknown").to_string();
+            let current_path = if base_path.is_empty() {
+                name.clone()
+            } else {
+                format!("{}/{}", base_path, name)
+            };
+            
+            let object = entry.to_object(repo).map_err(|e| e.to_string())?;
+            
+            match object.kind() {
+                Some(git2::ObjectType::Tree) => {
+                    let subtree = object.as_tree().unwrap();
+                    let children = build_tree_recursive(repo, subtree, &current_path)?;
+                    
+                    items.push(FileTreeItem {
+                        name,
+                        path: current_path,
+                        is_directory: true,
+                        children: Some(children),
+                        size: None,
+                        file_type: "folder".to_string(),
+                    });
+                }
+                Some(git2::ObjectType::Blob) => {
+                    let blob = object.as_blob().unwrap();
+                    let file_type = get_file_type(&name);
+                    
+                    items.push(FileTreeItem {
+                        name: name.clone(),
+                        path: current_path,
+                        is_directory: false,
+                        children: None,
+                        size: Some(blob.size() as u64),
+                        file_type,
+                    });
+                }
+                _ => {}
+            }
+        }
+        
+        // Sort items: directories first, then files, both alphabetically
+        items.sort_by(|a, b| {
+            match (a.is_directory, b.is_directory) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            }
+        });
+        
+        Ok(items)
+    }
+    
+    build_tree_recursive(&repo, &tree, "")
+}
+
+#[tauri::command]
+fn get_file_content(path: String, commit_id: String, file_path: String) -> Result<String, String> {
+    let repo_path = Path::new(&path);
+    let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    let oid = git2::Oid::from_str(&commit_id).map_err(|e| e.to_string())?;
+    let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    let tree = commit.tree().map_err(|e| e.to_string())?;
+    
+    // Find the file in the tree
+    let tree_entry = tree.get_path(Path::new(&file_path)).map_err(|e| {
+        format!("File '{}' not found in commit '{}': {}", file_path, commit_id, e)
+    })?;
+    
+    // Get the blob
+    let blob = repo.find_blob(tree_entry.id()).map_err(|e| e.to_string())?;
+    
+    // Check if file is binary
+    if blob.is_binary() {
+        return Err("Cannot display binary file content".to_string());
+    }
+    
+    // Check file size limits for performance
+    const MAX_FILE_SIZE: usize = 1024 * 1024; // 1MB
+    
+    if blob.size() > MAX_FILE_SIZE {
+        return Err(format!("File too large to display ({}KB > 1MB)", blob.size() / 1024));
+    }
+    
+    // Get file content
+    let content = String::from_utf8(blob.content().to_vec()).map_err(|e| format!("File is not valid UTF-8: {}", e))?;
+    
+    Ok(content)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_git_remotes_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame])
+    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_git_remotes_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame, get_commit_file_tree, get_file_content])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
