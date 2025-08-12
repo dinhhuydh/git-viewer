@@ -351,16 +351,21 @@
             background-color: #007acc;
             color: white;
             border: none;
-            padding: 8px 12px;
+            padding: 6px 12px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 16px;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            line-height: 1;
         }
         .recent-repos-button:hover {
             background-color: #005a9e;
+        }
+        .dropdown-arrow {
+            font-size: 12px;
+            line-height: 1;
         }
         .recent-repos-menu {
             position: absolute;
@@ -863,6 +868,11 @@
             border-right: 1px solid #dee2e6;
             min-width: 300px;
             display: flex;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            pointer-events: none;
             flex-direction: column;
             gap: 2px;
             font-size: 11px;
@@ -906,6 +916,11 @@
             padding: 4px 8px;
             border-right: 1px solid #dee2e6;
             min-width: 50px;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            pointer-events: none;
             text-align: right;
             font-size: 11px;
         }
@@ -989,6 +1004,10 @@
             text-align: right;
             border-right: 1px solid #dee2e6;
             user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            pointer-events: none;
             font-size: 11px;
         }
         .line-content {
@@ -1108,7 +1127,8 @@
                 <div class="repo-name" id="repo-name"></div>
                 <div class="recent-repos-dropdown">
                     <button class="recent-repos-button" id="recent-repos-button">
-                        Recent ▼
+                        <span>Recent</span>
+                        <span class="dropdown-arrow">▼</span>
                     </button>
                     <div class="recent-repos-menu" id="recent-repos-menu">
                         <div class="no-recent-repos">No recent repositories</div>
