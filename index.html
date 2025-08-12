@@ -1016,6 +1016,39 @@
             border-bottom: 1px solid #dee2e6;
             font-weight: bold;
             color: #0366d6;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .diff-header-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .open-file-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #0366d6;
+            opacity: 0.7;
+            transition: all 0.2s ease;
+        }
+        
+        .open-file-btn:hover {
+            background-color: rgba(3, 102, 214, 0.1);
+            opacity: 1;
+        }
+        
+        .open-file-btn svg {
+            width: 16px;
+            height: 16px;
         }
         .binary-file {
             padding: 20px;

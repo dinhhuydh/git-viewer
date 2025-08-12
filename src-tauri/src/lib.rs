@@ -812,6 +812,76 @@ fn get_commit_file_tree(path: String, commit_id: String) -> Result<Vec<FileTreeI
 }
 
 #[tauri::command]
+fn open_file_in_editor(repo_path: String, commit_id: String, file_path: String) -> Result<(), String> {
+    use std::process::Command;
+    use std::fs;
+    use std::io::Write;
+    
+    let repo_path_obj = Path::new(&repo_path);
+    let repo = git2::Repository::open(repo_path_obj).map_err(|e| e.to_string())?;
+    
+    // Get the commit
+    let oid = git2::Oid::from_str(&commit_id).map_err(|e| e.to_string())?;
+    let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    let tree = commit.tree().map_err(|e| e.to_string())?;
+    
+    // Find the file in the tree
+    let tree_entry = tree.get_path(Path::new(&file_path)).map_err(|e| {
+        format!("File '{}' not found in commit '{}': {}", file_path, commit_id, e)
+    })?;
+    
+    // Get the blob
+    let blob = repo.find_blob(tree_entry.id()).map_err(|e| e.to_string())?;
+    
+    // Check if file is binary
+    if blob.is_binary() {
+        return Err("Cannot open binary files in text editor".to_string());
+    }
+    
+    // Get file content
+    let content = String::from_utf8(blob.content().to_vec()).map_err(|e| format!("File is not valid UTF-8: {}", e))?;
+    
+    // Create temporary file
+    let temp_dir = std::env::temp_dir();
+    let file_name = Path::new(&file_path).file_name().unwrap_or_else(|| std::ffi::OsStr::new("temp_file"));
+    let temp_file_path = temp_dir.join(format!("git_viewer_{}_{}", commit_id[..8].to_string(), file_name.to_string_lossy()));
+    
+    // Write content to temporary file
+    let mut temp_file = fs::File::create(&temp_file_path).map_err(|e| format!("Failed to create temporary file: {}", e))?;
+    temp_file.write_all(content.as_bytes()).map_err(|e| format!("Failed to write to temporary file: {}", e))?;
+    
+    let temp_file_str = temp_file_path.to_str().ok_or("Invalid temporary file path")?;
+    
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("-a")
+            .arg("TextEdit")
+            .arg(temp_file_str)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in TextEdit: {}", e))?;
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("notepad")
+            .arg(temp_file_str)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in Notepad: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("gedit")
+            .arg(temp_file_str)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in gedit: {}", e))?;
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
 fn get_file_content(path: String, commit_id: String, file_path: String) -> Result<String, String> {
     let repo_path = Path::new(&path);
     let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
@@ -850,7 +920,7 @@ fn get_file_content(path: String, commit_id: String, file_path: String) -> Resul
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_git_remotes_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame, get_commit_file_tree, get_file_content])
+    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_git_remotes_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame, get_commit_file_tree, get_file_content, open_file_in_editor])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

@@ -620,17 +620,51 @@ function displayFileDiff(diff) {
     
     if (diff.is_binary) {
         diffDiv.innerHTML = `
-            <div class="diff-header">${diff.path} (${diff.status})</div>
+            <div class="diff-header">
+                <div class="diff-header-content">
+                    <span>${diff.path} (${diff.status})</span>
+                    <button class="open-file-btn" data-file-path="${diff.path}" title="Open in editor">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18 13V19C18 20.1046 17.1046 21 16 21H5C3.89543 21 3 20.1046 3 19V8C3 6.89543 3.89543 6 5 6H11M15 3H21V9M10 14L21 3"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
             <div class="binary-file">Binary file - cannot display diff</div>
         `;
+        // Add event listener for the open file button
+        const openFileBtn = diffDiv.querySelector('.open-file-btn');
+        if (openFileBtn) {
+            openFileBtn.addEventListener('click', () => {
+                const filePath = openFileBtn.getAttribute('data-file-path');
+                window.openFileInEditor(filePath);
+            });
+        }
         return;
     }
     
     if (diff.diff_lines.length === 0) {
         diffDiv.innerHTML = `
-            <div class="diff-header">${diff.path} (${diff.status})</div>
+            <div class="diff-header">
+                <div class="diff-header-content">
+                    <span>${diff.path} (${diff.status})</span>
+                    <button class="open-file-btn" data-file-path="${diff.path}" title="Open in editor">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18 13V19C18 20.1046 17.1046 21 16 21H5C3.89543 21 3 20.1046 3 19V8C3 6.89543 3.89543 6 5 6H11M15 3H21V9M10 14L21 3"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
             <p style="padding: 15px; color: #666; font-style: italic;">No changes to display</p>
         `;
+        // Add event listener for the open file button
+        const openFileBtn = diffDiv.querySelector('.open-file-btn');
+        if (openFileBtn) {
+            openFileBtn.addEventListener('click', () => {
+                const filePath = openFileBtn.getAttribute('data-file-path');
+                window.openFileInEditor(filePath);
+            });
+        }
         return;
     }
     
@@ -654,9 +688,29 @@ function displayFileDiff(diff) {
     }).join('');
     
     diffDiv.innerHTML = `
-        <div class="diff-header">${diff.path} (${diff.status})</div>
+        <div class="diff-header">
+            <div class="diff-header-content">
+                <span>${diff.path} (${diff.status})</span>
+                <button class="open-file-btn" data-file-path="${diff.path}" title="Open in editor">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
+                        <path d="M2 17L12 22L22 17"/>
+                        <path d="M2 12L12 17L22 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
         ${diffContent}
     `;
+    
+    // Add event listener for the open file button
+    const openFileBtn = diffDiv.querySelector('.open-file-btn');
+    if (openFileBtn) {
+        openFileBtn.addEventListener('click', () => {
+            const filePath = openFileBtn.getAttribute('data-file-path');
+            window.openFileInEditor(filePath);
+        });
+    }
 }
 
 async function loadFileView(filePath) {
@@ -729,9 +783,26 @@ function displayFileBlame(blame) {
     
     if (blame.blame_lines.length === 0) {
         diffDiv.innerHTML = `
-            <div class="diff-header">${blame.path} (blame)</div>
+            <div class="diff-header">
+                <div class="diff-header-content">
+                    <span>${blame.path} (blame)</span>
+                    <button class="open-file-btn" data-file-path="${blame.path}" title="Open in editor">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18 13V19C18 20.1046 17.1046 21 16 21H5C3.89543 21 3 20.1046 3 19V8C3 6.89543 3.89543 6 5 6H11M15 3H21V9M10 14L21 3"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
             <p style="padding: 15px; color: #666; font-style: italic;">No content to display</p>
         `;
+        // Add event listener for the open file button
+        const openFileBtn = diffDiv.querySelector('.open-file-btn');
+        if (openFileBtn) {
+            openFileBtn.addEventListener('click', () => {
+                const filePath = openFileBtn.getAttribute('data-file-path');
+                window.openFileInEditor(filePath);
+            });
+        }
         return;
     }
     
@@ -741,7 +812,18 @@ function displayFileBlame(blame) {
     // Create header
     const header = document.createElement('div');
     header.className = 'diff-header';
-    header.textContent = `${blame.path} (blame)`;
+    header.innerHTML = `
+        <div class="diff-header-content">
+            <span>${blame.path} (blame)</span>
+            <button class="open-file-btn" data-file-path="${blame.path}" title="Open in editor">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
+                    <path d="M2 17L12 22L22 17"/>
+                    <path d="M2 12L12 17L22 12"/>
+                </svg>
+            </button>
+        </div>
+    `;
     fragment.appendChild(header);
     
     // Get language for syntax highlighting
@@ -803,6 +885,15 @@ function displayFileBlame(blame) {
     // Replace content efficiently
     diffDiv.innerHTML = '';
     diffDiv.appendChild(fragment);
+    
+    // Add event listener for the open file button
+    const openFileBtn = diffDiv.querySelector('.open-file-btn');
+    if (openFileBtn) {
+        openFileBtn.addEventListener('click', () => {
+            const filePath = openFileBtn.getAttribute('data-file-path');
+            window.openFileInEditor(filePath);
+        });
+    }
 }
 
 function updateViewToggleButtons() {
@@ -833,6 +924,41 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// Function to open file in external editor
+window.openFileInEditor = async function openFileInEditor(filePath) {
+    console.log('openFileInEditor called with:', filePath);
+    console.log('currentRepoPath:', currentRepoPath);
+    console.log('selectedCommit:', selectedCommit);
+    
+    if (!currentRepoPath) {
+        console.error('No repository selected');
+        return;
+    }
+    
+    if (!selectedCommit) {
+        console.error('No commit selected');
+        return;
+    }
+
+    try {
+        console.log('Invoking open_file_in_editor with:', {
+            repoPath: currentRepoPath,
+            commitId: selectedCommit,
+            filePath: filePath
+        });
+        
+        await invoke('open_file_in_editor', {
+            repoPath: currentRepoPath,
+            commitId: selectedCommit,
+            filePath: filePath
+        });
+        
+        console.log('File opened successfully in TextEdit');
+    } catch (error) {
+        console.error('Failed to open file:', error);
+    }
+};
 
 function switchToMainViewMode(mode) {
     if (currentMainViewMode === mode) return;
