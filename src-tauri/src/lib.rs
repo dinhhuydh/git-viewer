@@ -7,6 +7,7 @@ use tauri::Emitter;
 pub struct GitBranch {
     name: String,
     is_current: bool,
+    last_commit_date: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,12 +102,22 @@ fn get_git_branches() -> Result<Vec<GitBranch>, String> {
     for branch_result in branch_iter {
         let (branch, _) = branch_result.map_err(|e| e.to_string())?;
         if let Some(name) = branch.name().map_err(|e| e.to_string())? {
+            // Get the last commit date for this branch
+            let last_commit_date = match branch.get().peel_to_commit() {
+                Ok(commit) => commit.time().seconds(),
+                Err(_) => 0, // Default to epoch if we can't get the commit
+            };
+            
             branches.push(GitBranch {
                 name: name.to_string(),
-                is_current: branch.is_head()
+                is_current: branch.is_head(),
+                last_commit_date,
             });
         }
     }
+    
+    // Sort branches by last commit date (descending - newest first)
+    branches.sort_by(|a, b| b.last_commit_date.cmp(&a.last_commit_date));
     
     Ok(branches)
 }
@@ -122,12 +133,22 @@ fn get_git_branches_from_path(path: String) -> Result<Vec<GitBranch>, String> {
     for branch_result in branch_iter {
         let (branch, _) = branch_result.map_err(|e| e.to_string())?;
         if let Some(name) = branch.name().map_err(|e| e.to_string())? {
+            // Get the last commit date for this branch
+            let last_commit_date = match branch.get().peel_to_commit() {
+                Ok(commit) => commit.time().seconds(),
+                Err(_) => 0, // Default to epoch if we can't get the commit
+            };
+            
             branches.push(GitBranch {
                 name: name.to_string(),
-                is_current: branch.is_head()
+                is_current: branch.is_head(),
+                last_commit_date,
             });
         }
     }
+    
+    // Sort branches by last commit date (descending - newest first)
+    branches.sort_by(|a, b| b.last_commit_date.cmp(&a.last_commit_date));
     
     Ok(branches)
 }
