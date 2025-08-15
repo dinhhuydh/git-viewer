@@ -1077,6 +1077,108 @@
             color: #666;
             font-style: italic;
         }
+        .sidebar-tabs {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .sidebar-tab {
+            flex: 1;
+            padding: 6px 8px;
+            border: none;
+            background: #f8f9fa;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+        }
+        .sidebar-tab:hover {
+            background: #e9ecef;
+        }
+        .sidebar-tab.active {
+            background: white;
+            color: #333;
+            border-bottom-color: #007acc;
+        }
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .staged-changes-list {
+            padding: 0;
+        }
+        .staged-file {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .staged-file:hover {
+            background-color: #f8f9fa;
+        }
+        .staged-file.selected {
+            background-color: #e3f2fd;
+        }
+        .file-status {
+            margin-right: 8px;
+            font-weight: bold;
+            width: 16px;
+            text-align: center;
+        }
+        .file-status.added { color: #28a745; }
+        .file-status.modified { color: #ffc107; }
+        .file-status.deleted { color: #dc3545; }
+        .file-status.renamed { color: #17a2b8; }
+        .file-path {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .stash-list {
+            padding: 0;
+        }
+        .stash-item {
+            padding: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .stash-item:hover {
+            background-color: #f8f9fa;
+        }
+        .stash-item.selected {
+            background-color: #e3f2fd;
+        }
+        .stash-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        .stash-index {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #007acc;
+        }
+        .stash-commit-id {
+            font-family: 'Courier New', monospace;
+            color: #666;
+            font-size: 12px;
+        }
+        .stash-message {
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: #333;
+        }
+        .stash-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #666;
+        }
+        .stash-author {
+            font-style: italic;
+        }
+        .stash-date {
+            color: #999;
+        }
     </style>
 </head>
 <body>
@@ -1142,11 +1244,19 @@
         <!-- Commits Sidebar -->
         <div class="commits-sidebar" id="commits-sidebar" tabindex="0">
             <div class="resize-handle right" id="commits-sidebar-resize-right"></div>
-            <div class="sidebar-header">
-                Commits
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" id="commits-tab-btn">Commits</button>
+                <button class="sidebar-tab" id="staged-tab-btn">Staged</button>
+                <button class="sidebar-tab" id="stash-tab-btn">Stash</button>
             </div>
-            <div id="commits">
+            <div id="commits" class="tab-content">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a branch to view commits</p>
+            </div>
+            <div id="staged" class="tab-content" style="display: none;">
+                <p style="padding: 15px; color: #666; font-style: italic;">No staged changes</p>
+            </div>
+            <div id="stash" class="tab-content" style="display: none;">
+                <p style="padding: 15px; color: #666; font-style: italic;">No stashes</p>
             </div>
         </div>
 
@@ -1182,11 +1292,19 @@
         <!-- Commits Sidebar -->
         <div class="commits-sidebar" id="explorer-commits-sidebar" tabindex="0">
             <div class="resize-handle right" id="explorer-commits-sidebar-resize-right"></div>
-            <div class="sidebar-header">
-                Commits
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" id="explorer-commits-tab-btn">Commits</button>
+                <button class="sidebar-tab" id="explorer-staged-tab-btn">Staged</button>
+                <button class="sidebar-tab" id="explorer-stash-tab-btn">Stash</button>
             </div>
-            <div id="explorer-commits">
+            <div id="explorer-commits" class="tab-content">
                 <p style="padding: 15px; color: #666; font-style: italic;">Select a branch to view commits</p>
+            </div>
+            <div id="explorer-staged" class="tab-content" style="display: none;">
+                <p style="padding: 15px; color: #666; font-style: italic;">No staged changes</p>
+            </div>
+            <div id="explorer-stash" class="tab-content" style="display: none;">
+                <p style="padding: 15px; color: #666; font-style: italic;">No stashes</p>
             </div>
         </div>
 

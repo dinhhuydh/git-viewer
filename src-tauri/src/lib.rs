@@ -35,6 +35,22 @@ pub struct FileChange {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct StagedChange {
+    path: String,
+    status: String, // "added", "modified", "deleted", "renamed"
+    old_path: Option<String>, // For renamed files
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GitStash {
+    index: u32,
+    message: String,
+    commit_id: String,
+    author: String,
+    date: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileDiff {
     path: String,
     status: String,
@@ -903,6 +919,408 @@ fn open_file_in_editor(repo_path: String, commit_id: String, file_path: String) 
 }
 
 #[tauri::command]
+fn get_staged_changes(path: String) -> Result<Vec<StagedChange>, String> {
+    let repo_path = Path::new(&path);
+    let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    let mut staged_changes = Vec::new();
+    
+    // Use Git's status functionality to get staged files
+    let mut status_options = git2::StatusOptions::new();
+    status_options.include_untracked(false);
+    status_options.include_ignored(false);
+    
+    let statuses = repo.statuses(Some(&mut status_options)).map_err(|e| e.to_string())?;
+    
+    for status_entry in statuses.iter() {
+        let file_path = status_entry.path().unwrap_or("unknown");
+        let status_flags = status_entry.status();
+        
+        // Check if the file is staged (in index)
+        if status_flags.contains(git2::Status::INDEX_NEW) {
+            staged_changes.push(StagedChange {
+                path: file_path.to_string(),
+                status: "added".to_string(),
+                old_path: None,
+            });
+        } else if status_flags.contains(git2::Status::INDEX_MODIFIED) {
+            staged_changes.push(StagedChange {
+                path: file_path.to_string(),
+                status: "modified".to_string(),
+                old_path: None,
+            });
+        } else if status_flags.contains(git2::Status::INDEX_DELETED) {
+            staged_changes.push(StagedChange {
+                path: file_path.to_string(),
+                status: "deleted".to_string(),
+                old_path: None,
+            });
+        } else if status_flags.contains(git2::Status::INDEX_RENAMED) {
+            staged_changes.push(StagedChange {
+                path: file_path.to_string(),
+                status: "renamed".to_string(),
+                old_path: None, // TODO: Get the old path for renames
+            });
+        } else if status_flags.contains(git2::Status::INDEX_TYPECHANGE) {
+            staged_changes.push(StagedChange {
+                path: file_path.to_string(),
+                status: "modified".to_string(),
+                old_path: None,
+            });
+        }
+    }
+    
+    Ok(staged_changes)
+}
+
+#[tauri::command]
+fn get_staged_file_diff(path: String, file_path: String) -> Result<FileDiff, String> {
+    let repo_path = Path::new(&path);
+    let repo = git2::Repository::open(repo_path).map_err(|e| format!("Failed to open repository: {}", e))?;
+    
+    // Get the index (staging area)
+    let index = repo.index().map_err(|e| format!("Failed to get index: {}", e))?;
+    
+    // Get HEAD tree for comparison (if it exists)
+    let head_tree = match repo.head() {
+        Ok(head) => {
+            let head_commit = head.peel_to_commit().map_err(|e| format!("Failed to get HEAD commit: {}", e))?;
+            Some(head_commit.tree().map_err(|e| format!("Failed to get HEAD tree: {}", e))?)
+        }
+        Err(_) => None, // Repository has no commits yet
+    };
+    
+    // Create diff options
+    let mut diff_opts = git2::DiffOptions::new();
+    diff_opts.context_lines(3);
+    diff_opts.max_size(1024 * 1024); // 1MB limit
+    diff_opts.pathspec(file_path.clone());
+    
+    // Create diff between HEAD and index (staged changes)
+    let diff = repo.diff_tree_to_index(
+        head_tree.as_ref(),
+        Some(&index),
+        Some(&mut diff_opts)
+    ).map_err(|e| format!("Failed to create diff: {}", e))?;
+    
+    // Find the specific file in the diff
+    let mut file_found = false;
+    let mut file_status = "unknown";
+    let mut is_binary = false;
+    
+    // First pass: find if the file exists in this diff
+    for (_delta_idx, delta) in diff.deltas().enumerate() {
+        let delta_path = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .and_then(|p| p.to_str())
+            .unwrap_or("unknown");
+        
+        if delta_path == file_path {
+            file_found = true;
+            file_status = match delta.status() {
+                git2::Delta::Added => "added",
+                git2::Delta::Deleted => "deleted", 
+                git2::Delta::Modified => "modified",
+                git2::Delta::Renamed => "renamed",
+                git2::Delta::Copied => "copied",
+                _ => "unknown",
+            };
+            is_binary = delta.new_file().is_binary() || delta.old_file().is_binary();
+            break;
+        }
+    }
+    
+    if !file_found {
+        return Err(format!("File '{}' not found in staged changes", file_path));
+    }
+    
+    if is_binary {
+        return Ok(FileDiff {
+            path: file_path,
+            status: file_status.to_string(),
+            old_content: None,
+            new_content: None,
+            diff_lines: Vec::new(),
+            is_binary: true,
+        });
+    }
+    
+    // Generate patch for text files
+    let mut patch_lines = Vec::new();
+    
+    for (delta_idx, delta) in diff.deltas().enumerate() {
+        let delta_path = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .and_then(|p| p.to_str())
+            .unwrap_or("unknown");
+        
+        if delta_path == file_path {
+            let patch = git2::Patch::from_diff(&diff, delta_idx).map_err(|e| format!("Failed to create patch: {}", e))?;
+            
+            if let Some(patch) = patch {
+                for hunk_idx in 0..patch.num_hunks() {
+                    let (_hunk, hunk_lines) = patch.hunk(hunk_idx).map_err(|e| format!("Failed to get hunk: {}", e))?;
+                    
+                    for line_idx in 0..hunk_lines {
+                        let line = patch.line_in_hunk(hunk_idx, line_idx).map_err(|e| format!("Failed to get line: {}", e))?;
+                        
+                        let line_content = String::from_utf8_lossy(line.content()).trim_end_matches('\n').to_string();
+                        let line_type = match line.origin() {
+                            '+' => "addition",
+                            '-' => "deletion", 
+                            ' ' => "context",
+                            _ => "context",
+                        };
+                        
+                        patch_lines.push(DiffLine {
+                            line_type: line_type.to_string(),
+                            content: line_content,
+                            old_line_number: line.old_lineno(),
+                            new_line_number: line.new_lineno(),
+                        });
+                    }
+                }
+            }
+            break;
+        }
+    }
+    
+    Ok(FileDiff {
+        path: file_path,
+        status: file_status.to_string(),
+        old_content: None,
+        new_content: None,
+        diff_lines: patch_lines,
+        is_binary: false,
+    })
+}
+
+#[tauri::command]
+fn get_stashes(path: String) -> Result<Vec<GitStash>, String> {
+    let repo_path = Path::new(&path);
+    let mut repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    let mut stashes = Vec::new();
+    
+    // Use git2's stash foreach to iterate through stashes
+    let repo_for_commit = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    repo.stash_foreach(|index, message, stash_id| {
+        // Get the stash commit
+        if let Ok(stash_commit) = repo_for_commit.find_commit(*stash_id) {
+            let author = stash_commit.author();
+            let timestamp = stash_commit.time();
+            
+            // Format the date
+            let datetime = chrono::DateTime::from_timestamp(timestamp.seconds(), 0)
+                .unwrap_or_else(|| chrono::DateTime::from_timestamp(0, 0).unwrap());
+            let formatted_date = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+            
+            stashes.push(GitStash {
+                index: index as u32,
+                message: message.to_string(),
+                commit_id: stash_id.to_string(),
+                author: format!("{} <{}>", 
+                    author.name().unwrap_or("Unknown"), 
+                    author.email().unwrap_or("unknown@email.com")),
+                date: formatted_date,
+            });
+        }
+        true // Continue iteration
+    }).map_err(|e| e.to_string())?;
+    
+    Ok(stashes)
+}
+
+#[tauri::command]
+fn get_stash_diff(path: String, stash_index: u32) -> Result<Vec<FileChange>, String> {
+    let repo_path = Path::new(&path);
+    let mut repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    // Get the stash commit by index
+    let mut stash_commit_id = None;
+    let mut current_index = 0;
+    
+    repo.stash_foreach(|index, _message, stash_id| {
+        if index as u32 == stash_index {
+            stash_commit_id = Some(*stash_id);
+            false // Stop iteration
+        } else {
+            current_index = index;
+            true // Continue iteration
+        }
+    }).map_err(|e| e.to_string())?;
+    
+    let stash_oid = stash_commit_id.ok_or("Stash not found")?;
+    let stash_commit = repo.find_commit(stash_oid).map_err(|e| e.to_string())?;
+    
+    // Get the parent commit (the commit the stash was based on)
+    let parent_commit = stash_commit.parent(0).map_err(|e| e.to_string())?;
+    
+    // Create diff between parent and stash
+    let parent_tree = parent_commit.tree().map_err(|e| e.to_string())?;
+    let stash_tree = stash_commit.tree().map_err(|e| e.to_string())?;
+    
+    let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), None)
+        .map_err(|e| e.to_string())?;
+    
+    let mut changes = Vec::new();
+    
+    for (_, delta) in diff.deltas().enumerate() {
+        let file_path = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .and_then(|p| p.to_str())
+            .unwrap_or("unknown");
+        
+        let status = match delta.status() {
+            git2::Delta::Added => "added",
+            git2::Delta::Deleted => "deleted", 
+            git2::Delta::Modified => "modified",
+            git2::Delta::Renamed => "renamed",
+            git2::Delta::Copied => "copied",
+            _ => "unknown",
+        };
+        
+        // Get line count stats
+        let stats = diff.stats().map_err(|e| e.to_string())?;
+        
+        changes.push(FileChange {
+            path: file_path.to_string(),
+            status: status.to_string(),
+            additions: stats.insertions() as u32,
+            deletions: stats.deletions() as u32,
+        });
+    }
+    
+    Ok(changes)
+}
+
+#[tauri::command]
+fn get_stash_file_diff(path: String, stash_index: u32, file_path: String) -> Result<FileDiff, String> {
+    let repo_path = Path::new(&path);
+    let mut repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
+    
+    // Get the stash commit by index
+    let mut stash_commit_id = None;
+    
+    repo.stash_foreach(|index, _message, stash_id| {
+        if index as u32 == stash_index {
+            stash_commit_id = Some(*stash_id);
+            false // Stop iteration
+        } else {
+            true // Continue iteration
+        }
+    }).map_err(|e| e.to_string())?;
+    
+    let stash_oid = stash_commit_id.ok_or("Stash not found")?;
+    let stash_commit = repo.find_commit(stash_oid).map_err(|e| e.to_string())?;
+    
+    // Get the parent commit
+    let parent_commit = stash_commit.parent(0).map_err(|e| e.to_string())?;
+    
+    // Create diff between parent and stash for specific file
+    let parent_tree = parent_commit.tree().map_err(|e| e.to_string())?;
+    let stash_tree = stash_commit.tree().map_err(|e| e.to_string())?;
+    
+    let mut diff_opts = git2::DiffOptions::new();
+    diff_opts.context_lines(3);
+    diff_opts.pathspec(file_path.clone());
+    
+    let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&stash_tree), Some(&mut diff_opts))
+        .map_err(|e| e.to_string())?;
+    
+    // Find the specific file in the diff
+    let mut file_found = false;
+    let mut file_status = "unknown";
+    let mut is_binary = false;
+    
+    for (_delta_idx, delta) in diff.deltas().enumerate() {
+        let delta_path = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .and_then(|p| p.to_str())
+            .unwrap_or("unknown");
+        
+        if delta_path == file_path {
+            file_found = true;
+            file_status = match delta.status() {
+                git2::Delta::Added => "added",
+                git2::Delta::Deleted => "deleted", 
+                git2::Delta::Modified => "modified",
+                git2::Delta::Renamed => "renamed",
+                git2::Delta::Copied => "copied",
+                _ => "unknown",
+            };
+            is_binary = delta.new_file().is_binary() || delta.old_file().is_binary();
+            break;
+        }
+    }
+    
+    if !file_found {
+        return Err(format!("File '{}' not found in stash changes", file_path));
+    }
+    
+    if is_binary {
+        return Ok(FileDiff {
+            path: file_path,
+            status: file_status.to_string(),
+            old_content: None,
+            new_content: None,
+            diff_lines: Vec::new(),
+            is_binary: true,
+        });
+    }
+    
+    // Generate patch for text files
+    let mut patch_lines = Vec::new();
+    
+    for (delta_idx, delta) in diff.deltas().enumerate() {
+        let delta_path = delta.new_file().path()
+            .or_else(|| delta.old_file().path())
+            .and_then(|p| p.to_str())
+            .unwrap_or("unknown");
+        
+        if delta_path == file_path {
+            let patch = git2::Patch::from_diff(&diff, delta_idx).map_err(|e| format!("Failed to create patch: {}", e))?;
+            
+            if let Some(patch) = patch {
+                for hunk_idx in 0..patch.num_hunks() {
+                    let (_hunk, hunk_lines) = patch.hunk(hunk_idx).map_err(|e| format!("Failed to get hunk: {}", e))?;
+                    
+                    for line_idx in 0..hunk_lines {
+                        let line = patch.line_in_hunk(hunk_idx, line_idx).map_err(|e| format!("Failed to get line: {}", e))?;
+                        
+                        let line_content = String::from_utf8_lossy(line.content()).trim_end_matches('\n').to_string();
+                        let line_type = match line.origin() {
+                            '+' => "addition",
+                            '-' => "deletion", 
+                            ' ' => "context",
+                            _ => "context",
+                        };
+                        
+                        patch_lines.push(DiffLine {
+                            line_type: line_type.to_string(),
+                            content: line_content,
+                            old_line_number: line.old_lineno(),
+                            new_line_number: line.new_lineno(),
+                        });
+                    }
+                }
+            }
+            break;
+        }
+    }
+    
+    Ok(FileDiff {
+        path: file_path,
+        status: file_status.to_string(),
+        old_content: None,
+        new_content: None,
+        diff_lines: patch_lines,
+        is_binary: false,
+    })
+}
+
+#[tauri::command]
 fn get_file_content(path: String, commit_id: String, file_path: String) -> Result<String, String> {
     let repo_path = Path::new(&path);
     let repo = git2::Repository::open(repo_path).map_err(|e| e.to_string())?;
@@ -941,7 +1359,7 @@ fn get_file_content(path: String, commit_id: String, file_path: String) -> Resul
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_git_remotes_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame, get_commit_file_tree, get_file_content, open_file_in_editor])
+    .invoke_handler(tauri::generate_handler![get_git_branches, get_git_branches_from_path, get_git_remotes_from_path, get_commits_from_path, get_commit_changes, get_file_diff, open_repo_dialog, global_search, get_file_blame, get_commit_file_tree, get_file_content, open_file_in_editor, get_staged_changes, get_staged_file_diff, get_stashes, get_stash_diff, get_stash_file_diff])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

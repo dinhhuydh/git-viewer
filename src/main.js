@@ -184,6 +184,9 @@ let expandedDirectories = new Set();
 let selectedExplorerFile = null;
 let explorerFilterText = '';
 
+// Sidebar mode
+let currentSidebarMode = 'commits'; // 'commits', 'staged', or 'stash'
+
 async function loadGitBranches(repoPath = null) {
     try {
         let branches;
@@ -2496,8 +2499,562 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load last opened repository
     await loadLastRepository();
     
+    // Setup sidebar tabs
+    setupSidebarTabs();
+    
     // Load git branches for current repository if available
     if (currentRepoPath) {
         await loadGitBranches(currentRepoPath);
     }
 });
+
+function setupSidebarTabs() {
+    const commitsTabBtn = document.getElementById('commits-tab-btn');
+    const stagedTabBtn = document.getElementById('staged-tab-btn');
+    const stashTabBtn = document.getElementById('stash-tab-btn');
+    const explorerCommitsTabBtn = document.getElementById('explorer-commits-tab-btn');
+    const explorerStagedTabBtn = document.getElementById('explorer-staged-tab-btn');
+    const explorerStashTabBtn = document.getElementById('explorer-stash-tab-btn');
+    
+    commitsTabBtn.addEventListener('click', () => switchSidebarMode('commits'));
+    stagedTabBtn.addEventListener('click', () => switchSidebarMode('staged'));
+    stashTabBtn.addEventListener('click', () => switchSidebarMode('stash'));
+    explorerCommitsTabBtn.addEventListener('click', () => switchSidebarMode('commits'));
+    explorerStagedTabBtn.addEventListener('click', () => switchSidebarMode('staged'));
+    explorerStashTabBtn.addEventListener('click', () => switchSidebarMode('stash'));
+}
+
+function switchSidebarMode(mode) {
+    if (currentSidebarMode === mode) return;
+    
+    currentSidebarMode = mode;
+    
+    // Update tab buttons
+    const allTabs = document.querySelectorAll('.sidebar-tab');
+    allTabs.forEach(tab => tab.classList.remove('active'));
+    
+    if (currentMainViewMode === 'diff') {
+        const activeTab = mode === 'commits' ? 
+            document.getElementById('commits-tab-btn') : 
+            mode === 'staged' ?
+            document.getElementById('staged-tab-btn') :
+            document.getElementById('stash-tab-btn');
+        activeTab.classList.add('active');
+        
+        // Show/hide content
+        document.getElementById('commits').style.display = mode === 'commits' ? 'block' : 'none';
+        document.getElementById('staged').style.display = mode === 'staged' ? 'block' : 'none';
+        document.getElementById('stash').style.display = mode === 'stash' ? 'block' : 'none';
+    } else {
+        const activeTab = mode === 'commits' ? 
+            document.getElementById('explorer-commits-tab-btn') : 
+            mode === 'staged' ?
+            document.getElementById('explorer-staged-tab-btn') :
+            document.getElementById('explorer-stash-tab-btn');
+        activeTab.classList.add('active');
+        
+        // Show/hide content
+        document.getElementById('explorer-commits').style.display = mode === 'commits' ? 'block' : 'none';
+        document.getElementById('explorer-staged').style.display = mode === 'staged' ? 'block' : 'none';
+        document.getElementById('explorer-stash').style.display = mode === 'stash' ? 'block' : 'none';
+    }
+    
+    // Load content based on selected mode
+    if (mode === 'staged' && currentBranch && currentBranch.is_current) {
+        loadStagedChanges();
+        updateFileChangesForStaged();
+    } else if (mode === 'stash') {
+        loadStashes();
+        updateFileChangesForStash();
+    } else if (mode === 'commits') {
+        // Clear file changes pane when switching back to commits
+        const fileChangesDiv = document.getElementById('file-changes');
+        fileChangesDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">Select a commit to view file changes</p>';
+        
+        // Clear diff panel
+        const diffDiv = document.getElementById('file-diff');
+        diffDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">Select a file to view changes</p>';
+        
+        const diffPanelTitle = document.getElementById('diff-panel-title');
+        diffPanelTitle.textContent = 'File Diff';
+        
+        // Reset File Changes header
+        const panelHeader = fileChangesDiv.previousElementSibling;
+        if (panelHeader && panelHeader.classList.contains('panel-header-with-filter')) {
+            panelHeader.innerHTML = `
+                File Changes
+                <input type="text" class="filter-input" id="file-filter" placeholder="Filter files..." />
+            `;
+            
+            // Reinitialize file filtering for commits
+            const filterInput = document.getElementById('file-filter');
+            filterInput.addEventListener('input', (e) => {
+                filterFiles(e.target.value);
+            });
+            filterInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    filterInput.value = '';
+                    filterFiles('');
+                    filterInput.blur();
+                }
+            });
+        }
+        
+        // Clear selectedCommit when switching back to commits to avoid confusion
+        selectedCommit = null;
+        
+        // Remove any commit selection highlights
+        document.querySelectorAll('.commit.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+    }
+}
+
+async function loadStagedChanges() {
+    if (!currentRepoPath) return;
+    
+    try {
+        const stagedChanges = await invoke('get_staged_changes', { path: currentRepoPath });
+        
+        const stagedDiv = currentMainViewMode === 'diff' ? 
+            document.getElementById('staged') : 
+            document.getElementById('explorer-staged');
+        
+        if (stagedChanges.length === 0) {
+            stagedDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No staged changes</p>';
+            return;
+        }
+        
+        let stagedHtml = '<div class="staged-changes-list">';
+        stagedChanges.forEach(file => {
+            const statusIcon = getStatusIcon(file.status);
+            stagedHtml += `
+                <div class="staged-file" data-path="${file.path}">
+                    <span class="file-status ${file.status}">${statusIcon}</span>
+                    <span class="file-path">${file.path}</span>
+                </div>
+            `;
+        });
+        stagedHtml += '</div>';
+        
+        stagedDiv.innerHTML = stagedHtml;
+        
+        // Add click handlers for staged files
+        const stagedFiles = stagedDiv.querySelectorAll('.staged-file');
+        stagedFiles.forEach(fileElement => {
+            fileElement.addEventListener('click', () => {
+                const filePath = fileElement.dataset.path;
+                selectStagedFile(filePath);
+            });
+        });
+        
+    } catch (error) {
+        console.error('Failed to load staged changes:', error);
+        const stagedDiv = currentMainViewMode === 'diff' ? 
+            document.getElementById('staged') : 
+            document.getElementById('explorer-staged');
+        stagedDiv.innerHTML = '<p style="padding: 15px; color: #dc3545; font-style: italic;">Failed to load staged changes</p>';
+    }
+}
+
+function getStatusIcon(status) {
+    switch (status) {
+        case 'added': return '✓';
+        case 'modified': return '●';
+        case 'deleted': return '✗';
+        case 'renamed': return '→';
+        default: return '?';
+    }
+}
+
+async function selectStagedFile(filePath) {
+    if (!currentRepoPath) return;
+    
+    // Remove previous selection
+    document.querySelectorAll('.staged-file.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+    
+    // Add selection to clicked file
+    const stagedDiv = currentMainViewMode === 'diff' ? 
+        document.getElementById('staged') : 
+        document.getElementById('explorer-staged');
+    const fileElement = stagedDiv.querySelector(`[data-path="${filePath}"]`);
+    if (fileElement) {
+        fileElement.classList.add('selected');
+    }
+    
+    try {
+        const fileDiff = await invoke('get_staged_file_diff', { 
+            path: currentRepoPath, 
+            filePath: filePath 
+        });
+        
+        displayStagedFileDiff(fileDiff);
+        
+    } catch (error) {
+        console.error('Failed to get staged file diff:', error);
+        const diffDiv = document.getElementById('file-diff');
+        diffDiv.innerHTML = '<p style="padding: 15px; color: #dc3545;">Failed to load staged file diff</p>';
+    }
+}
+
+function displayStagedFileDiff(fileDiff) {
+    const diffDiv = document.getElementById('file-diff');
+    const diffPanelTitle = document.getElementById('diff-panel-title');
+    
+    diffPanelTitle.textContent = `Staged: ${fileDiff.path}`;
+    
+    if (fileDiff.is_binary) {
+        diffDiv.innerHTML = '<div class="binary-file">Binary file - cannot display diff</div>';
+        return;
+    }
+    
+    if (fileDiff.diff_lines.length === 0) {
+        diffDiv.innerHTML = '<p style="padding: 15px; color: #666;">No diff to display</p>';
+        return;
+    }
+    
+    let diffHtml = '<div class="diff-content">';
+    fileDiff.diff_lines.forEach(line => {
+        const lineClass = `diff-line ${line.line_type}`;
+        const lineNumber = line.line_type === 'deletion' ? 
+            (line.old_line_number ? line.old_line_number : '') :
+            (line.new_line_number ? line.new_line_number : '');
+        
+        diffHtml += `
+            <div class="${lineClass}">
+                <span class="line-number" data-line="${lineNumber}">${lineNumber}</span>
+                <span class="line-content">${escapeHtml(line.content)}</span>
+            </div>
+        `;
+    });
+    diffHtml += '</div>';
+    
+    diffDiv.innerHTML = diffHtml;
+}
+
+async function updateFileChangesForStaged() {
+    if (!currentRepoPath) return;
+    
+    try {
+        const stagedChanges = await invoke('get_staged_changes', { path: currentRepoPath });
+        
+        const fileChangesDiv = document.getElementById('file-changes');
+        const panelHeader = fileChangesDiv.previousElementSibling;
+        
+        // Update header to show "Staged Changes"
+        if (panelHeader && panelHeader.classList.contains('panel-header-with-filter')) {
+            panelHeader.innerHTML = `
+                Staged Changes
+                <input type="text" class="filter-input" id="file-filter" placeholder="Filter files..." />
+            `;
+            
+            // Reinitialize file filtering
+            const filterInput = document.getElementById('file-filter');
+            filterInput.addEventListener('input', (e) => {
+                filterStagedFiles(e.target.value);
+            });
+            filterInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    filterInput.value = '';
+                    filterStagedFiles('');
+                    filterInput.blur();
+                }
+            });
+        }
+        
+        if (stagedChanges.length === 0) {
+            fileChangesDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No staged changes</p>';
+            return;
+        }
+        
+        // Display staged files in File Changes pane
+        let fileChangesHtml = '<div class="file-changes-list">';
+        stagedChanges.forEach(file => {
+            const statusIcon = getStatusIcon(file.status);
+            const fileTypeIcon = getFileTypeIcon(file.path);
+            
+            fileChangesHtml += `
+                <div class="file-change staged-file-change" data-path="${file.path}">
+                    <div class="file-info">
+                        <span class="file-type-icon">${fileTypeIcon}</span>
+                        <span class="file-path">${file.path}</span>
+                        <span class="open-file-btn" data-path="${file.path}" data-commit="staged" title="Open file in editor">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                            </svg>
+                        </span>
+                    </div>
+                    <div class="file-stats">
+                        <span class="file-status ${file.status}" title="${file.status}">${statusIcon}</span>
+                    </div>
+                </div>
+            `;
+        });
+        fileChangesHtml += '</div>';
+        
+        fileChangesDiv.innerHTML = fileChangesHtml;
+        
+        // Add click handlers for staged file changes
+        const stagedFileChanges = fileChangesDiv.querySelectorAll('.staged-file-change');
+        stagedFileChanges.forEach(fileElement => {
+            fileElement.addEventListener('click', () => {
+                const filePath = fileElement.dataset.path;
+                selectStagedFileFromChanges(filePath, fileElement);
+            });
+        });
+        
+        // Add open file handlers
+        addOpenFileHandlers(fileChangesDiv);
+        
+    } catch (error) {
+        console.error('Failed to update file changes for staged:', error);
+        const fileChangesDiv = document.getElementById('file-changes');
+        fileChangesDiv.innerHTML = '<p style="padding: 15px; color: #dc3545; font-style: italic;">Failed to load staged changes</p>';
+    }
+}
+
+async function selectStagedFileFromChanges(filePath, fileElement) {
+    if (!currentRepoPath) return;
+    
+    // Remove previous selection
+    document.querySelectorAll('.file-change.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+    
+    // Add selection to clicked file
+    fileElement.classList.add('selected');
+    
+    try {
+        const fileDiff = await invoke('get_staged_file_diff', { 
+            path: currentRepoPath, 
+            filePath: filePath 
+        });
+        
+        displayStagedFileDiff(fileDiff);
+        
+    } catch (error) {
+        console.error('Failed to get staged file diff:', error);
+        const diffDiv = document.getElementById('file-diff');
+        diffDiv.innerHTML = '<p style="padding: 15px; color: #dc3545;">Failed to load staged file diff</p>';
+    }
+}
+
+function filterStagedFiles(filterText) {
+    const fileChanges = document.querySelectorAll('.staged-file-change');
+    
+    fileChanges.forEach(fileChange => {
+        const filePath = fileChange.dataset.path;
+        const shouldShow = filterText === '' || filePath.toLowerCase().includes(filterText.toLowerCase());
+        fileChange.style.display = shouldShow ? 'block' : 'none';
+    });
+}
+
+async function loadStashes() {
+    if (!currentRepoPath) return;
+    
+    try {
+        const stashes = await invoke('get_stashes', { path: currentRepoPath });
+        
+        const stashDiv = currentMainViewMode === 'diff' ? 
+            document.getElementById('stash') : 
+            document.getElementById('explorer-stash');
+        
+        if (stashes.length === 0) {
+            stashDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No stashes</p>';
+            return;
+        }
+        
+        let stashHtml = '<div class="stash-list">';
+        stashes.forEach(stash => {
+            const shortCommitId = stash.commit_id.substring(0, 8);
+            stashHtml += `
+                <div class="stash-item" data-index="${stash.index}" data-commit="${stash.commit_id}">
+                    <div class="stash-header">
+                        <span class="stash-index">stash@{${stash.index}}</span>
+                        <span class="stash-commit-id">${shortCommitId}</span>
+                    </div>
+                    <div class="stash-message">${stash.message}</div>
+                    <div class="stash-meta">
+                        <span class="stash-author">${stash.author}</span>
+                        <span class="stash-date">${stash.date}</span>
+                    </div>
+                </div>
+            `;
+        });
+        stashHtml += '</div>';
+        
+        stashDiv.innerHTML = stashHtml;
+        
+        // Add click handlers for stashes
+        const stashItems = stashDiv.querySelectorAll('.stash-item');
+        stashItems.forEach(stashElement => {
+            stashElement.addEventListener('click', () => {
+                const stashIndex = parseInt(stashElement.dataset.index);
+                const commitId = stashElement.dataset.commit;
+                selectStash(stashIndex, commitId, stashElement);
+            });
+        });
+        
+    } catch (error) {
+        console.error('Failed to load stashes:', error);
+        const stashDiv = currentMainViewMode === 'diff' ? 
+            document.getElementById('stash') : 
+            document.getElementById('explorer-stash');
+        stashDiv.innerHTML = '<p style="padding: 15px; color: #dc3545; font-style: italic;">Failed to load stashes</p>';
+    }
+}
+
+async function selectStash(stashIndex, commitId, stashElement) {
+    if (!currentRepoPath) return;
+    
+    // Remove previous selection
+    document.querySelectorAll('.stash-item.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+    
+    // Add selection to clicked stash
+    stashElement.classList.add('selected');
+    
+    try {
+        const stashDiff = await invoke('get_stash_diff', { 
+            path: currentRepoPath, 
+            stashIndex: stashIndex 
+        });
+        
+        displayStashChanges(stashDiff, stashIndex);
+        
+    } catch (error) {
+        console.error('Failed to get stash diff:', error);
+        const fileChangesDiv = document.getElementById('file-changes');
+        fileChangesDiv.innerHTML = '<p style="padding: 15px; color: #dc3545;">Failed to load stash changes</p>';
+    }
+}
+
+function displayStashChanges(fileChanges, stashIndex) {
+    const fileChangesDiv = document.getElementById('file-changes');
+    
+    if (fileChanges.length === 0) {
+        fileChangesDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">No changes in this stash</p>';
+        return;
+    }
+    
+    let fileChangesHtml = '<div class="file-changes-list">';
+    fileChanges.forEach(file => {
+        const statusIcon = getStatusIcon(file.status);
+        const fileTypeIcon = getFileTypeIcon(file.path);
+        
+        fileChangesHtml += `
+            <div class="file-change stash-file-change" data-path="${file.path}" data-stash-index="${stashIndex}">
+                <div class="file-info">
+                    <span class="file-type-icon">${fileTypeIcon}</span>
+                    <span class="file-path">${file.path}</span>
+                </div>
+                <div class="file-stats">
+                    <span class="file-status ${file.status}" title="${file.status}">${statusIcon}</span>
+                    <span class="file-additions">+${file.additions}</span>
+                    <span class="file-deletions">-${file.deletions}</span>
+                </div>
+            </div>
+        `;
+    });
+    fileChangesHtml += '</div>';
+    
+    fileChangesDiv.innerHTML = fileChangesHtml;
+    
+    // Add click handlers for stash file changes
+    const stashFileChanges = fileChangesDiv.querySelectorAll('.stash-file-change');
+    stashFileChanges.forEach(fileElement => {
+        fileElement.addEventListener('click', () => {
+            const filePath = fileElement.dataset.path;
+            const stashIndex = parseInt(fileElement.dataset.stashIndex);
+            selectStashFileFromChanges(filePath, stashIndex, fileElement);
+        });
+    });
+}
+
+async function selectStashFileFromChanges(filePath, stashIndex, fileElement) {
+    if (!currentRepoPath) return;
+    
+    // Remove previous selection
+    document.querySelectorAll('.file-change.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+    
+    // Add selection to clicked file
+    fileElement.classList.add('selected');
+    
+    try {
+        const fileDiff = await invoke('get_stash_file_diff', { 
+            path: currentRepoPath, 
+            stashIndex: stashIndex,
+            filePath: filePath 
+        });
+        
+        displayStashFileDiff(fileDiff, stashIndex);
+        
+    } catch (error) {
+        console.error('Failed to get stash file diff:', error);
+        const diffDiv = document.getElementById('file-diff');
+        diffDiv.innerHTML = '<p style="padding: 15px; color: #dc3545;">Failed to load stash file diff</p>';
+    }
+}
+
+function displayStashFileDiff(fileDiff, stashIndex) {
+    const diffDiv = document.getElementById('file-diff');
+    const diffPanelTitle = document.getElementById('diff-panel-title');
+    
+    diffPanelTitle.textContent = `Stash@{${stashIndex}}: ${fileDiff.path}`;
+    
+    if (fileDiff.is_binary) {
+        diffDiv.innerHTML = '<div class="binary-file">Binary file - cannot display diff</div>';
+        return;
+    }
+    
+    if (fileDiff.diff_lines.length === 0) {
+        diffDiv.innerHTML = '<p style="padding: 15px; color: #666;">No diff to display</p>';
+        return;
+    }
+    
+    let diffHtml = '<div class="diff-content">';
+    fileDiff.diff_lines.forEach(line => {
+        const lineClass = `diff-line ${line.line_type}`;
+        const lineNumber = line.line_type === 'deletion' ? 
+            (line.old_line_number ? line.old_line_number : '') :
+            (line.new_line_number ? line.new_line_number : '');
+        
+        diffHtml += `
+            <div class="${lineClass}">
+                <span class="line-number" data-line="${lineNumber}">${lineNumber}</span>
+                <span class="line-content">${escapeHtml(line.content)}</span>
+            </div>
+        `;
+    });
+    diffHtml += '</div>';
+    
+    diffDiv.innerHTML = diffHtml;
+}
+
+async function updateFileChangesForStash() {
+    const fileChangesDiv = document.getElementById('file-changes');
+    const panelHeader = fileChangesDiv.previousElementSibling;
+    
+    // Update header to show "Stash Changes"
+    if (panelHeader && panelHeader.classList.contains('panel-header-with-filter')) {
+        panelHeader.innerHTML = `
+            Stash Changes
+            <input type="text" class="filter-input" id="file-filter" placeholder="Filter files..." />
+        `;
+    }
+    
+    // Clear file changes initially
+    fileChangesDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">Select a stash to view changes</p>';
+    
+    // Clear diff panel
+    const diffDiv = document.getElementById('file-diff');
+    diffDiv.innerHTML = '<p style="padding: 15px; color: #666; font-style: italic;">Select a file to view changes</p>';
+    
+    const diffPanelTitle = document.getElementById('diff-panel-title');
+    diffPanelTitle.textContent = 'File Diff';
+}
