@@ -2429,6 +2429,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         openRepository();
     });
     
+    // Auto-refresh branches when window becomes focused
+    window.addEventListener('focus', async () => {
+        if (currentRepoPath) {
+            console.log('Window focused, refreshing branches...');
+            await loadGitBranches(currentRepoPath);
+        }
+    });
+    
     // Initialize main view mode buttons
     const diffModeBtn = document.getElementById('diff-mode-btn');
     const explorerModeBtn = document.getElementById('explorer-mode-btn');
